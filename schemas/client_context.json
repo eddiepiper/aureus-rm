@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aureus-rm.internal/schemas/client_context.json",
+  "title": "ClientContext",
+  "description": "Full client context record passed to Aureus RM Copilot commands. Represents a point-in-time snapshot of a client's relationship data, portfolio, and risk profile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "client_id",
+    "client_name",
+    "segment",
+    "rm_owner",
+    "relationship_since",
+    "aum_band",
+    "risk_profile",
+    "data_as_of"
+  ],
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "Unique CRM identifier for the client (e.g. CRM-UUID or internal client code)."
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Full legal name or entity name of the client."
+    },
+    "segment": {
+      "type": "string",
+      "description": "Client segment classification used for service tiering and product eligibility.",
+      "enum": ["HNW", "UHNW", "Mass Affluent", "Institutional"]
+    },
+    "rm_owner": {
+      "type": "string",
+      "description": "Employee ID or email of the Relationship Manager responsible for this client."
+    },
+    "relationship_since": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the client relationship was formally onboarded (ISO 8601 date, YYYY-MM-DD)."
+    },
+    "aum_band": {
+      "type": "string",
+      "description": "Approximate AUM band in Singapore Dollars (SGD). Used for service-tier and mandate-limit calculations.",
+      "enum": ["<1M", "1M-5M", "5M-25M", "25M-100M", ">100M"]
+    },
+    "risk_profile": {
+      "type": "object",
+      "description": "Client risk tolerance and mandate constraints as assessed in the most recent suitability review.",
+      "additionalProperties": false,
+      "required": ["risk_rating", "investment_horizon"],
+      "properties": {
+        "risk_rating": {
+          "type": "string",
+          "description": "Standardised risk rating from the firm's suitability framework.",
+          "enum": ["Conservative", "Moderately Conservative", "Balanced", "Moderately Aggressive", "Aggressive"]
+        },
+        "investment_horizon": {
+          "type": "string",
+          "description": "Client's stated investment time horizon.",
+          "enum": ["Short-term (<2 years)", "Medium-term (2-5 years)", "Long-term (>5 years)"]
+        },
+        "max_single_name_pct": {
+          "type": "number",
+          "description": "Maximum allowable weight in a single security as a percentage of total portfolio (0–100).",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "max_sector_pct": {
+          "type": "number",
+          "description": "Maximum allowable weight in any single sector as a percentage of total portfolio (0–100).",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "excluded_sectors": {
+          "type": "array",
+          "description": "Sectors explicitly excluded from the client's mandate (e.g. for ESG or personal preference reasons).",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "excluded_geographies": {
+          "type": "array",
+          "description": "Geographies or countries explicitly excluded from the client's mandate.",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "esg_preference": {
+          "type": "string",
+          "description": "Client's ESG / responsible-investment stance.",
+          "enum": ["None", "Preference", "Mandatory", "Impact-only"]
+        },
+        "suitability_review_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Date of the most recent suitability review (ISO 8601 date)."
+        }
+      }
+    },
+    "holdings_summary": {
+      "type": "object",
+      "description": "Current portfolio holdings snapshot.",
+      "additionalProperties": false,
+      "required": ["total_market_value", "currency", "as_of_date"],
+      "properties": {
+        "total_market_value": {
+          "type": "number",
+          "description": "Total portfolio market value in the specified currency.",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "description": "Currency of total_market_value (ISO 4217 code, e.g. SGD, USD).",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "as_of_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Valuation date for the holdings snapshot (ISO 8601 date)."
+        },
+        "top_holdings": {
+          "type": "array",
+          "description": "List of top holdings by weight, used for concentration analysis.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ticker", "name", "weight_pct"],
+            "properties": {
+              "ticker": {
+                "type": "string",
+                "description": "Exchange ticker symbol (e.g. AAPL, 700 HK)."
+              },
+              "name": {
+                "type": "string",
+                "description": "Full company or instrument name."
+              },
+              "sector": {
+                "type": "string",
+                "description": "GICS sector or equivalent classification."
+              },
+              "geography": {
+                "type": "string",
+                "description": "Primary listing geography or country of revenue (ISO 3166-1 alpha-2 or region name)."
+              },
+              "weight_pct": {
+                "type": "number",
+                "description": "Portfolio weight as a percentage of total market value (0–100).",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "market_value": {
+                "type": "number",
+                "description": "Market value of this holding in portfolio currency.",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "exposure_breakdown": {
+      "type": "object",
+      "description": "Portfolio exposure summary broken down by sector, geography, and asset class. Values are percentage weights summing to approximately 100.",
+      "additionalProperties": false,
+      "properties": {
+        "by_sector": {
+          "type": "object",
+          "description": "Map of sector name to portfolio weight percentage.",
+          "additionalProperties": { "type": "number", "minimum": 0, "maximum": 100 }
+        },
+        "by_geography": {
+          "type": "object",
+          "description": "Map of geography/country name to portfolio weight percentage.",
+          "additionalProperties": { "type": "number", "minimum": 0, "maximum": 100 }
+        },
+        "by_asset_class": {
+          "type": "object",
+          "description": "Map of asset class name to portfolio weight percentage (e.g. Equities, Fixed Income, Cash, Alternatives).",
+          "additionalProperties": { "type": "number", "minimum": 0, "maximum": 100 }
+        }
+      }
+    },
+    "interaction_history": {
+      "type": "array",
+      "description": "Chronological log of client interactions (calls, meetings, emails) relevant to the current relationship context.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "channel", "summary"],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Date of the interaction (ISO 8601)."
+          },
+          "channel": {
+            "type": "string",
+            "description": "Interaction channel.",
+            "enum": ["Meeting", "Phone", "Email", "Video Call", "Other"]
+          },
+          "summary": {
+            "type": "string",
+            "description": "Brief RM notes summarising the interaction."
+          },
+          "follow_up_pending": {
+            "type": "boolean",
+            "description": "Whether a follow-up action is still outstanding from this interaction."
+          },
+          "follow_up_description": {
+            "type": "string",
+            "description": "Description of the pending follow-up action (if follow_up_pending is true)."
+          }
+        }
+      }
+    },
+    "active_follow_ups": {
+      "type": "array",
+      "description": "Consolidated list of all open follow-up items across all interactions.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "due_date", "owner"],
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Description of the follow-up action."
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Target completion date (ISO 8601)."
+          },
+          "owner": {
+            "type": "string",
+            "description": "RM user or team responsible for this follow-up."
+          },
+          "status": {
+            "type": "string",
+            "description": "Current status of the follow-up.",
+            "enum": ["pending", "in_progress", "completed", "deferred"]
+          }
+        }
+      }
+    },
+    "data_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp indicating when this client context record was last refreshed."
+    },
+    "data_sources": {
+      "type": "array",
+      "description": "List of upstream systems or MCP tools that contributed data to this record (for audit and traceability).",
+      "items": { "type": "string" }
+    }
+  }
+}

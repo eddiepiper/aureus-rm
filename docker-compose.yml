@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  aureus-app:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      # Live-mount source for development (remove in prod)
+      - .:/app
+      # Mount credentials separately so they are never baked into the image
+      - ./credentials:/app/credentials:ro
+    command: python app.py
+    restart: unless-stopped

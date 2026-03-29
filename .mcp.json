@@ -1,0 +1,329 @@
+{
+  "mcpServers": {
+    "aureus_mock": {
+      "description": "Consolidated mock server for all Aureus tools. Replaces all placeholder servers during local development. Switch to individual live servers in production.",
+      "command": "python",
+      "args": ["mock_server.py"],
+      "env": {}
+    },
+    "_crm_production_placeholder": {
+      "description": "PRODUCTION: Internal CRM connector — swap this in for aureus_mock when CRM API is available",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "crm.get_client_profile": {
+          "description": "Retrieve structured client profile by name or client ID",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "client_id": { "type": "string" },
+              "client_name": { "type": "string" }
+            },
+            "required": []
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "client_id": { "type": "string" },
+              "name": { "type": "string" },
+              "segment": { "type": "string" },
+              "rm_owner": { "type": "string" },
+              "relationship_since": { "type": "string" },
+              "aum_band": { "type": "string" },
+              "preferred_contact": { "type": "string" }
+            }
+          }
+        },
+        "crm.get_recent_interactions": {
+          "description": "Retrieve recent interaction history for a client",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "client_id": { "type": "string" },
+              "limit": { "type": "integer", "default": 5 }
+            },
+            "required": ["client_id"]
+          },
+          "output_schema": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": { "type": "string" },
+                "channel": { "type": "string" },
+                "summary": { "type": "string" },
+                "follow_up_pending": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "portfolio": {
+      "description": "Internal portfolio and holdings connector",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "portfolio.get_holdings": {
+          "description": "Retrieve current holdings for a client portfolio",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "client_id": { "type": "string" }
+            },
+            "required": ["client_id"]
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "holdings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ticker": { "type": "string" },
+                    "name": { "type": "string" },
+                    "sector": { "type": "string" },
+                    "market_value": { "type": "number" },
+                    "weight_pct": { "type": "number" },
+                    "unrealized_pnl_pct": { "type": "number" }
+                  }
+                }
+              },
+              "total_aum": { "type": "number" },
+              "currency": { "type": "string" }
+            }
+          }
+        },
+        "portfolio.get_exposure_breakdown": {
+          "description": "Retrieve sector, geography, and asset class exposure breakdown",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "client_id": { "type": "string" }
+            },
+            "required": ["client_id"]
+          }
+        }
+      }
+    },
+    "suitability": {
+      "description": "Suitability and risk profile connector",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "suitability.get_risk_profile": {
+          "description": "Retrieve client risk profile and investment mandate",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "client_id": { "type": "string" }
+            },
+            "required": ["client_id"]
+          },
+          "output_schema": {
+            "type": "object",
+            "properties": {
+              "risk_rating": { "type": "string", "enum": ["conservative", "moderate", "balanced", "growth", "aggressive"] },
+              "investment_horizon": { "type": "string" },
+              "excluded_sectors": { "type": "array", "items": { "type": "string" } },
+              "max_single_name_pct": { "type": "number" },
+              "max_sector_pct": { "type": "number" },
+              "liquidity_requirement": { "type": "string" }
+            }
+          }
+        },
+        "suitability.validate_recommendation_framing": {
+          "description": "Validate that output language meets internal compliance framing requirements",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "context": { "type": "string" }
+            },
+            "required": ["text"]
+          }
+        }
+      }
+    },
+    "market": {
+      "description": "External market data connector — prices, company snapshots, price history",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "market.get_company_snapshot": {
+          "description": "Retrieve company overview: description, sector, market cap, key metrics",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "ticker": { "type": "string" }
+            },
+            "required": ["ticker"]
+          }
+        },
+        "market.get_price_history": {
+          "description": "Retrieve historical price and volume data for a ticker",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "ticker": { "type": "string" },
+              "period": { "type": "string", "enum": ["1m", "3m", "6m", "1y", "3y"] }
+            },
+            "required": ["ticker"]
+          }
+        }
+      }
+    },
+    "fundamentals": {
+      "description": "Financial fundamentals and estimates connector",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "fundamentals.get_financials": {
+          "description": "Retrieve income statement, balance sheet, and cash flow data",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "ticker": { "type": "string" },
+              "period": { "type": "string", "enum": ["annual", "ttm", "quarterly"] }
+            },
+            "required": ["ticker"]
+          }
+        },
+        "fundamentals.get_estimates": {
+          "description": "Retrieve analyst consensus estimates for revenue, EPS, and key metrics",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "ticker": { "type": "string" }
+            },
+            "required": ["ticker"]
+          }
+        }
+      }
+    },
+    "research": {
+      "description": "Earnings and news research connector",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "research.get_earnings_summary": {
+          "description": "Retrieve earnings summary for a specific quarter",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "ticker": { "type": "string" },
+              "quarter": { "type": "string" }
+            },
+            "required": ["ticker"]
+          }
+        },
+        "research.search_news": {
+          "description": "Search recent news articles and press releases for a ticker",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "ticker": { "type": "string" },
+              "days_back": { "type": "integer", "default": 30 }
+            },
+            "required": ["ticker"]
+          }
+        }
+      }
+    },
+    "house_view": {
+      "description": "Internal house view and investment strategy connector",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "house_view.get_internal_view": {
+          "description": "Retrieve internal house view rating and commentary for a ticker or sector",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "ticker": { "type": "string" },
+              "sector": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "compliance": {
+      "description": "Compliance and approved products connector",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "compliance.check_disclosures": {
+          "description": "Check whether required disclosures apply for a ticker or product",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "ticker": { "type": "string" },
+              "product_type": { "type": "string" }
+            }
+          }
+        },
+        "compliance.get_approved_products": {
+          "description": "Retrieve list of approved products for the current distribution context",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "client_segment": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "notes": {
+      "description": "Internal notes and meeting log connector",
+      "placeholder": true,
+      "transport": "stdio",
+      "command": "placeholder",
+      "args": [],
+      "tools": {
+        "notes.save_meeting_prep": {
+          "description": "Save a structured meeting prep note to internal CRM or notes system",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "client_id": { "type": "string" },
+              "meeting_date": { "type": "string" },
+              "content": { "type": "object" },
+              "created_by": { "type": "string" }
+            },
+            "required": ["client_id", "content"]
+          }
+        },
+        "notes.save_action_item": {
+          "description": "Log a next-best-action item to the internal workflow system",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "client_id": { "type": "string" },
+              "action": { "type": "string" },
+              "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+              "due_date": { "type": "string" }
+            },
+            "required": ["client_id", "action"]
+          }
+        }
+      }
+    }
+  }
+}

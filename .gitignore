@@ -1,0 +1,29 @@
+# Secrets — never commit these
+.env
+credentials/*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# JSON — block all except schemas (which are safe to commit)
+*.json
+!schemas/*.json
+!.mcp.json

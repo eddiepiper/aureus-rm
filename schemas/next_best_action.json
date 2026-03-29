@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aureus-rm.internal/schemas/next_best_action.json",
+  "title": "NextBestAction",
+  "description": "Schema for the next-best-action command output. Provides a prioritised, structured list of recommended actions for the RM to take with a specific client, spanning relationship management, portfolio, compliance, and administrative categories.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "client_id",
+    "client_name",
+    "generated_at",
+    "generated_by",
+    "actions"
+  ],
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "Unique CRM identifier for the client."
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Full name of the client."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when this next-best-action output was generated."
+    },
+    "generated_by": {
+      "type": "string",
+      "description": "RM user identifier or email who triggered this next-best-action request."
+    },
+    "actions": {
+      "type": "array",
+      "description": "Ordered list of recommended actions, sorted by priority (high to low) then by classification.",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action_id",
+          "title",
+          "classification",
+          "what",
+          "why",
+          "priority",
+          "status"
+        ],
+        "properties": {
+          "action_id": {
+            "type": "string",
+            "description": "Unique identifier for this action within the response (e.g. NBA-001, NBA-002). Stable across re-runs for the same underlying trigger."
+          },
+          "title": {
+            "type": "string",
+            "description": "Short, action-oriented title for the RM (e.g. 'Schedule annual suitability review', 'Discuss Asia tech allocation')."
+          },
+          "classification": {
+            "type": "string",
+            "description": "Category of action to help the RM prioritise by workflow type.",
+            "enum": ["relationship", "portfolio", "compliance", "administrative"]
+          },
+          "what": {
+            "type": "string",
+            "description": "Specific, concrete action the RM should take. Written as a clear instruction (e.g. 'Call the client to discuss reducing Financials sector exposure from 28% to below the 25% mandate limit')."
+          },
+          "why": {
+            "type": "string",
+            "description": "Rationale explaining why this action is recommended now. Should reference relevant triggers (e.g. market event, approaching deadline, client conversation)."
+          },
+          "supporting_evidence": {
+            "description": "Data points or evidence supporting this recommendation. Can be a single string or an array of discrete evidence items.",
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1
+              }
+            ]
+          },
+          "suitability_note": {
+            "type": "string",
+            "description": "RM-safe suitability framing for this action — how to position it appropriately in a client conversation without making prohibited claims."
+          },
+          "priority": {
+            "type": "string",
+            "description": "Priority level for this action relative to others in this output.",
+            "enum": ["high", "medium", "low"]
+          },
+          "suggested_timing": {
+            "type": "string",
+            "description": "Suggested timeframe or deadline for completing this action (e.g. 'This week', 'Before end of quarter', 'Within 30 days', 'Before next meeting')."
+          },
+          "requires_approval": {
+            "type": "boolean",
+            "description": "True if this action requires internal approval (compliance pre-clearance, credit approval, product approval, etc.) before execution."
+          },
+          "approval_type": {
+            "type": "string",
+            "description": "Type of approval required (only present if requires_approval is true, e.g. 'Compliance pre-clearance', 'Credit committee', 'Product approval')."
+          },
+          "status": {
+            "type": "string",
+            "description": "Current execution status of this action.",
+            "enum": ["pending", "in_progress", "completed", "deferred"]
+          }
+        },
+        "if": {
+          "properties": { "requires_approval": { "const": true } }
+        },
+        "then": {
+          "required": ["approval_type"]
+        }
+      }
+    },
+    "summary_note": {
+      "type": "string",
+      "description": "High-level narrative summary of the most important actions and the overall theme of this next-best-action output. Written for the RM as a quick orientation before reading the detailed action list."
+    },
+    "data_as_of": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp indicating the most recent data point used to generate these recommendations. May differ from generated_at if data was cached."
+    }
+  }
+}

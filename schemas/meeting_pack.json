@@ -1,0 +1,247 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aureus-rm.internal/schemas/meeting_pack.json",
+  "title": "MeetingPack",
+  "description": "Schema for the meeting-pack command output. A structured pre-meeting dossier for the RM covering client context, portfolio summary, discussion topics, market themes, agenda, and open follow-ups.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "client_id",
+    "client_name",
+    "meeting_date",
+    "prepared_by",
+    "prepared_at"
+  ],
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "Unique CRM identifier for the client."
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Full name of the client."
+    },
+    "meeting_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date of the scheduled meeting (ISO 8601, YYYY-MM-DD)."
+    },
+    "prepared_by": {
+      "type": "string",
+      "description": "RM user identifier or name who requested this meeting pack."
+    },
+    "prepared_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when this meeting pack was generated."
+    },
+    "client_summary": {
+      "type": "object",
+      "description": "High-level snapshot of the client relationship for quick RM reference.",
+      "additionalProperties": false,
+      "properties": {
+        "profile_snapshot": {
+          "type": "string",
+          "description": "2–4 sentence narrative covering the client's background, goals, and key relationship notes."
+        },
+        "relationship_notes": {
+          "type": "string",
+          "description": "Key qualitative notes about the relationship (communication preferences, sensitivities, recent context)."
+        },
+        "aum_band": {
+          "type": "string",
+          "description": "Client AUM band in SGD.",
+          "enum": ["<1M", "1M-5M", "5M-25M", "25M-100M", ">100M"]
+        },
+        "risk_rating": {
+          "type": "string",
+          "description": "Client's current suitability risk rating.",
+          "enum": ["Conservative", "Moderately Conservative", "Balanced", "Moderately Aggressive", "Aggressive"]
+        }
+      }
+    },
+    "portfolio_summary": {
+      "type": "object",
+      "description": "Current portfolio snapshot for RM review before the meeting.",
+      "additionalProperties": false,
+      "properties": {
+        "total_value": {
+          "type": "number",
+          "description": "Total portfolio market value in the specified currency.",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "description": "Portfolio valuation currency (ISO 4217, e.g. SGD, USD).",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "as_of_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Valuation date for the portfolio snapshot."
+        },
+        "top_holdings": {
+          "type": "array",
+          "description": "Top holdings by weight for RM reference.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ticker", "name", "weight_pct"],
+            "properties": {
+              "ticker": { "type": "string", "description": "Ticker symbol." },
+              "name": { "type": "string", "description": "Company or instrument name." },
+              "weight_pct": {
+                "type": "number",
+                "description": "Portfolio weight percentage.",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "performance_note": {
+                "type": "string",
+                "description": "Optional brief performance note for this holding (e.g. +12% YTD, recent earnings beat)."
+              }
+            }
+          }
+        },
+        "notable_changes": {
+          "type": "array",
+          "description": "Significant portfolio changes since the last meeting worth discussing (e.g. large price moves, position changes, new additions).",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "discussion_topics": {
+      "type": "array",
+      "description": "Prepared discussion topics for the meeting, ordered by priority.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["topic_title", "context"],
+        "properties": {
+          "topic_title": {
+            "type": "string",
+            "description": "Short, clear topic headline (e.g. 'Q3 Portfolio Performance Review')."
+          },
+          "context": {
+            "type": "string",
+            "description": "Background context for the RM — why this topic is relevant now."
+          },
+          "supporting_data": {
+            "type": "string",
+            "description": "Key data points or facts supporting this topic (formatted as brief bullets or a short paragraph)."
+          },
+          "talking_points": {
+            "type": "array",
+            "description": "Suggested talking points or questions the RM can use to guide the conversation.",
+            "items": { "type": "string" }
+          },
+          "estimated_time_mins": {
+            "type": "integer",
+            "description": "Estimated time allocation for this topic in minutes.",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "market_context": {
+      "type": "array",
+      "description": "Relevant macro and market themes to provide context for the portfolio discussion.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["theme", "brief_summary"],
+        "properties": {
+          "theme": {
+            "type": "string",
+            "description": "Market theme headline (e.g. 'Fed rate path uncertainty', 'China reopening trade')."
+          },
+          "relevance_to_client": {
+            "type": "string",
+            "description": "Why this theme is relevant to this specific client's portfolio or goals."
+          },
+          "brief_summary": {
+            "type": "string",
+            "description": "2–3 sentence summary of the theme and its market implications."
+          }
+        }
+      }
+    },
+    "suggested_agenda": {
+      "type": "array",
+      "description": "Recommended meeting agenda, ordered by sequence.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "type"],
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Agenda item description."
+          },
+          "duration_mins": {
+            "type": "integer",
+            "description": "Allocated time for this agenda item in minutes.",
+            "minimum": 1
+          },
+          "type": {
+            "type": "string",
+            "description": "Nature of the agenda item.",
+            "enum": ["open", "discussion", "review", "admin"]
+          }
+        }
+      }
+    },
+    "open_follow_ups": {
+      "type": "array",
+      "description": "Open follow-up items from previous interactions that should be addressed or referenced in this meeting.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "owner", "status"],
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Description of the follow-up action."
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Target completion date (ISO 8601)."
+          },
+          "owner": {
+            "type": "string",
+            "description": "RM user or team responsible."
+          },
+          "status": {
+            "type": "string",
+            "description": "Current follow-up status.",
+            "enum": ["pending", "in_progress", "completed", "deferred"]
+          }
+        }
+      }
+    },
+    "preparation_checklist": {
+      "type": "array",
+      "description": "RM preparation checklist — items to complete before the meeting.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "completed"],
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Checklist item description (e.g. 'Review latest portfolio valuation report')."
+          },
+          "completed": {
+            "type": "boolean",
+            "description": "Whether the RM has completed this preparation step."
+          }
+        }
+      }
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "INTERNAL USE ONLY — RM notes and context not intended for client distribution. This field must be excluded from any version of this document shared with the client."
+    }
+  }
+}

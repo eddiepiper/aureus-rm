@@ -1,0 +1,292 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aureus-rm.internal/schemas/stock_brief.json",
+  "title": "StockBrief",
+  "description": "Structured output schema for the stock-brief command. Captures business overview, performance, financials, consensus estimates, catalysts, risks, recent news, and the firm's house view on a single equity.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ticker",
+    "company_name",
+    "exchange",
+    "currency",
+    "generated_at"
+  ],
+  "properties": {
+    "ticker": {
+      "type": "string",
+      "description": "Exchange ticker symbol (e.g. AAPL, 700 HK, DBS SP)."
+    },
+    "company_name": {
+      "type": "string",
+      "description": "Full legal company name."
+    },
+    "exchange": {
+      "type": "string",
+      "description": "Primary listing exchange (e.g. NASDAQ, HKEX, SGX, NYSE, LSE)."
+    },
+    "currency": {
+      "type": "string",
+      "description": "Trading currency of the instrument (ISO 4217 code, e.g. USD, HKD, SGD).",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "business_overview": {
+      "type": "object",
+      "description": "High-level description of the company's business and market position.",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "2–4 sentence plain-English summary of what the company does and its competitive position."
+        },
+        "sector": {
+          "type": "string",
+          "description": "GICS sector classification (e.g. Information Technology, Financials)."
+        },
+        "industry": {
+          "type": "string",
+          "description": "GICS industry group (e.g. Software, Banks)."
+        },
+        "market_cap": {
+          "type": "number",
+          "description": "Market capitalisation in the instrument's trading currency (millions).",
+          "minimum": 0
+        },
+        "employees": {
+          "type": "integer",
+          "description": "Approximate number of full-time employees as of the most recent filing.",
+          "minimum": 0
+        }
+      }
+    },
+    "performance": {
+      "type": "object",
+      "description": "Historical price performance metrics.",
+      "additionalProperties": false,
+      "properties": {
+        "price_current": {
+          "type": "number",
+          "description": "Most recent closing price in trading currency.",
+          "minimum": 0
+        },
+        "price_3m_ago": {
+          "type": "number",
+          "description": "Closing price 3 months prior to the data date.",
+          "minimum": 0
+        },
+        "price_1y_ago": {
+          "type": "number",
+          "description": "Closing price 12 months prior to the data date.",
+          "minimum": 0
+        },
+        "return_3m_pct": {
+          "type": "number",
+          "description": "Total return over the trailing 3 months (percentage, e.g. 12.5 = +12.5%)."
+        },
+        "return_1y_pct": {
+          "type": "number",
+          "description": "Total return over the trailing 12 months (percentage)."
+        },
+        "ytd_pct": {
+          "type": "number",
+          "description": "Year-to-date total return from 1 January of the current year (percentage)."
+        }
+      }
+    },
+    "financials": {
+      "type": "object",
+      "description": "Key trailing-twelve-month (TTM) and ratio-based financial metrics.",
+      "additionalProperties": false,
+      "properties": {
+        "revenue_ttm": {
+          "type": "number",
+          "description": "Trailing twelve-month revenue in trading currency (millions)."
+        },
+        "revenue_growth_yoy_pct": {
+          "type": "number",
+          "description": "Year-over-year revenue growth rate (percentage)."
+        },
+        "ebitda_margin_pct": {
+          "type": "number",
+          "description": "EBITDA margin as a percentage of revenue.",
+          "minimum": -100,
+          "maximum": 100
+        },
+        "net_income_ttm": {
+          "type": "number",
+          "description": "Trailing twelve-month net income in trading currency (millions)."
+        },
+        "eps_ttm": {
+          "type": "number",
+          "description": "Trailing twelve-month earnings per share in trading currency."
+        },
+        "pe_ratio": {
+          "type": "number",
+          "description": "Price-to-earnings ratio (TTM). Null if loss-making.",
+          "minimum": 0
+        },
+        "pb_ratio": {
+          "type": "number",
+          "description": "Price-to-book ratio.",
+          "minimum": 0
+        },
+        "roe_pct": {
+          "type": "number",
+          "description": "Return on equity (TTM) as a percentage."
+        },
+        "dividend_yield_pct": {
+          "type": "number",
+          "description": "Trailing dividend yield as a percentage of current price.",
+          "minimum": 0
+        }
+      }
+    },
+    "estimates": {
+      "type": "object",
+      "description": "Sell-side consensus estimates and price targets for the next fiscal year.",
+      "additionalProperties": false,
+      "properties": {
+        "revenue_next_fy": {
+          "type": "number",
+          "description": "Consensus revenue estimate for the next fiscal year (millions)."
+        },
+        "eps_next_fy": {
+          "type": "number",
+          "description": "Consensus EPS estimate for the next fiscal year in trading currency."
+        },
+        "consensus_rating": {
+          "type": "string",
+          "description": "Aggregated consensus rating from covering analysts.",
+          "enum": ["Strong Buy", "Buy", "Hold", "Underperform", "Sell"]
+        },
+        "num_analysts": {
+          "type": "integer",
+          "description": "Number of analysts contributing to the consensus.",
+          "minimum": 0
+        },
+        "price_target_low": {
+          "type": "number",
+          "description": "Lowest analyst 12-month price target in trading currency.",
+          "minimum": 0
+        },
+        "price_target_high": {
+          "type": "number",
+          "description": "Highest analyst 12-month price target in trading currency.",
+          "minimum": 0
+        },
+        "price_target_median": {
+          "type": "number",
+          "description": "Median analyst 12-month price target in trading currency.",
+          "minimum": 0
+        }
+      }
+    },
+    "catalysts": {
+      "type": "array",
+      "description": "Upcoming events or developments that could materially move the stock.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description", "timeframe"],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Brief description of the catalyst (e.g. Q2 earnings release, FDA approval decision)."
+          },
+          "timeframe": {
+            "type": "string",
+            "description": "Expected timing (e.g. Q3 2025, H2 2025, Within 3 months)."
+          },
+          "upside_driver": {
+            "type": "boolean",
+            "description": "True if this catalyst is primarily an upside driver; false if it is a downside risk event."
+          }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "description": "Key investment risks for this equity.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description", "severity"],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Specific risk factor description."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Assessed severity of the risk.",
+            "enum": ["low", "medium", "high"]
+          }
+        }
+      }
+    },
+    "recent_news": {
+      "type": "array",
+      "description": "Relevant recent news items about the company.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "headline", "source"],
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Publication date of the news item (ISO 8601)."
+          },
+          "headline": {
+            "type": "string",
+            "description": "News headline."
+          },
+          "source": {
+            "type": "string",
+            "description": "Publication or wire service name (e.g. Bloomberg, Reuters, FT)."
+          },
+          "relevance_note": {
+            "type": "string",
+            "description": "Brief RM-facing note on why this news item is relevant to the investment thesis or client context."
+          }
+        }
+      }
+    },
+    "house_view": {
+      "type": "object",
+      "description": "The firm's internal research house view on this security, if available.",
+      "additionalProperties": false,
+      "required": ["available"],
+      "properties": {
+        "available": {
+          "type": "boolean",
+          "description": "True if the firm has a published house view on this security."
+        },
+        "rating": {
+          "type": "string",
+          "description": "Firm's internal rating (only present if available is true).",
+          "enum": ["Buy", "Overweight", "Neutral", "Underweight", "Sell", "Under Review"]
+        },
+        "summary": {
+          "type": "string",
+          "description": "2–4 sentence summary of the firm's thesis (only present if available is true)."
+        },
+        "last_updated": {
+          "type": "string",
+          "format": "date",
+          "description": "Date the house view was last published or updated (ISO 8601)."
+        }
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when this stock brief was generated."
+    },
+    "data_sources": {
+      "type": "array",
+      "description": "MCP tools or data providers that contributed to this brief (for attribution and audit).",
+      "items": { "type": "string" }
+    }
+  }
+}

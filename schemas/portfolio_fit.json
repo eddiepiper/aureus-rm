@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://aureus-rm.internal/schemas/portfolio_fit.json",
+  "title": "PortfolioFitAssessment",
+  "description": "Schema for the portfolio-fit command output. Assesses whether adding a specific security is suitable for a client given their mandate constraints, risk profile, and current portfolio composition.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "client_id",
+    "client_name",
+    "ticker",
+    "company_name",
+    "assessed_at",
+    "fit_verdict",
+    "fit_rationale",
+    "suitability_framing",
+    "disclaimer"
+  ],
+  "properties": {
+    "client_id": {
+      "type": "string",
+      "description": "Unique CRM identifier for the client."
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Full name of the client."
+    },
+    "ticker": {
+      "type": "string",
+      "description": "Exchange ticker symbol of the security being assessed."
+    },
+    "company_name": {
+      "type": "string",
+      "description": "Full company name of the security being assessed."
+    },
+    "assessed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when this assessment was generated."
+    },
+    "client_snapshot": {
+      "type": "object",
+      "description": "Key client parameters used as inputs to the assessment.",
+      "additionalProperties": false,
+      "required": ["risk_rating", "aum_band"],
+      "properties": {
+        "risk_rating": {
+          "type": "string",
+          "description": "Client's current risk rating from their suitability profile.",
+          "enum": ["Conservative", "Moderately Conservative", "Balanced", "Moderately Aggressive", "Aggressive"]
+        },
+        "aum_band": {
+          "type": "string",
+          "description": "Client AUM band in SGD.",
+          "enum": ["<1M", "1M-5M", "5M-25M", "25M-100M", ">100M"]
+        },
+        "key_constraints": {
+          "type": "array",
+          "description": "Active mandate constraints that are relevant to this assessment (e.g. excluded sectors, max concentration limits).",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "current_exposure": {
+      "type": "object",
+      "description": "Client's existing exposure to this security, its sector, and related geography before any new position.",
+      "additionalProperties": false,
+      "properties": {
+        "ticker_current_pct": {
+          "type": "number",
+          "description": "Current portfolio weight in this specific ticker as a percentage (0 if not held).",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "sector_current_pct": {
+          "type": "number",
+          "description": "Current portfolio weight in the security's GICS sector as a percentage.",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "geography_current_pct": {
+          "type": "number",
+          "description": "Current portfolio weight in the security's primary geography as a percentage.",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "correlated_holdings": {
+          "type": "array",
+          "description": "Other holdings in the portfolio that are highly correlated or in the same sector/theme.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "concentration_impact": {
+      "type": "object",
+      "description": "Projected portfolio concentration after a hypothetical addition of this security.",
+      "additionalProperties": false,
+      "properties": {
+        "projected_ticker_pct": {
+          "type": "number",
+          "description": "Projected portfolio weight in this ticker after addition (assumes a standard position size).",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "projected_sector_pct": {
+          "type": "number",
+          "description": "Projected sector weight after addition.",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "within_mandate": {
+          "type": "boolean",
+          "description": "True if the projected concentrations remain within the client's mandate limits."
+        },
+        "concentration_flags": {
+          "type": "array",
+          "description": "Specific concentration limits that would be breached or approached (e.g. 'Single-name limit 5%: projected 6.2%').",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "diversification_assessment": {
+      "type": "object",
+      "description": "Qualitative assessment of whether adding this security improves portfolio diversification.",
+      "additionalProperties": false,
+      "properties": {
+        "adds_diversification": {
+          "type": "boolean",
+          "description": "True if this security introduces new sector, geographic, or factor exposure not well-represented in the current portfolio."
+        },
+        "correlation_note": {
+          "type": "string",
+          "description": "Brief note on how this security correlates with the existing portfolio (e.g. high correlation with existing tech holdings)."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "1–3 sentence narrative on the diversification impact."
+        }
+      }
+    },
+    "fit_verdict": {
+      "type": "string",
+      "description": "Overall portfolio fit verdict for this client-security pairing.",
+      "enum": ["fits", "partially_fits", "does_not_fit", "requires_review"]
+    },
+    "fit_rationale": {
+      "type": "string",
+      "description": "Plain-English explanation of the fit verdict, referencing the specific factors that drove the assessment."
+    },
+    "suitability_framing": {
+      "type": "string",
+      "description": "RM-safe language suitable for use in a client conversation. Avoids prohibited phrases and is framed as a discussion point rather than a recommendation."
+    },
+    "risks_to_discuss": {
+      "type": "array",
+      "description": "Risks the RM should proactively raise with the client in relation to this security.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["risk", "relevance_to_client"],
+        "properties": {
+          "risk": {
+            "type": "string",
+            "description": "Description of the risk factor."
+          },
+          "relevance_to_client": {
+            "type": "string",
+            "description": "Why this risk is particularly relevant given the client's profile or existing portfolio."
+          }
+        }
+      }
+    },
+    "compliance_flags": {
+      "type": "array",
+      "description": "Specific compliance items that must be addressed before this security can be discussed or transacted.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["flag_type", "description", "action_required"],
+        "properties": {
+          "flag_type": {
+            "type": "string",
+            "description": "Category of compliance flag (e.g. excluded_sector, mandate_breach, suitability_gap, client_restriction)."
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed description of the compliance concern."
+          },
+          "action_required": {
+            "type": "string",
+            "description": "Specific action the RM must take to resolve this flag before proceeding."
+          }
+        }
+      }
+    },
+    "disclaimer": {
+      "type": "string",
+      "description": "Standard regulatory disclaimer to be presented with this assessment. Must not be removed or modified."
+    }
+  }
+}
