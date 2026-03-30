@@ -74,11 +74,19 @@ def main() -> None:
 
     # 4. Services
     client_service = ClientService(sheets=sheets, use_mock=use_mock)
-    router = CommandRouter(client_service=client_service, claude_service=claude_service)
+    router = CommandRouter(
+        client_service=client_service,
+        claude_service=claude_service,
+        sheets_service=sheets,
+    )
 
     # 5. Telegram bot
     logger.info("Starting Telegram bot...")
-    app = build_application(token=config.telegram_bot_token, router=router)
+    app = build_application(
+        token=config.telegram_bot_token,
+        router=router,
+        sheets_service=sheets,
+    )
     app.run_polling(drop_pending_updates=True)
 
 
