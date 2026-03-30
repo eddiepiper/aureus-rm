@@ -121,6 +121,10 @@ class SheetsService:
                 return row
         return None
 
+    def validate_telegram_access(self, chat_id: str) -> bool:
+        """Return True if chat_id is registered in the Customers tab."""
+        return self.get_customer_by_telegram_chat_id(chat_id) is not None
+
     def get_customer_by_id(self, customer_id: str) -> Optional[dict]:
         """Find a customer by customer_id."""
         rows = self._get_tab(TAB_CUSTOMERS)
@@ -174,12 +178,25 @@ class SheetsService:
             and str(r.get("status", "")).lower() in ("open", "in progress", "pending")
         ]
 
+    # Column order must match bootstrap_google_sheet.py TABS schema exactly
+    INTERACTION_COLS = [
+        "interaction_id", "customer_id", "interaction_date", "channel",
+        "interaction_type", "summary", "key_topics", "sentiment",
+        "concern_level", "requested_action", "agent_response_summary",
+        "follow_up_required", "follow_up_due", "owner", "last_updated",
+    ]
+    TASK_COLS = [
+        "task_id", "customer_id", "created_date", "task_type", "action_title",
+        "action_detail", "rationale", "urgency", "status", "due_date",
+        "owner", "source", "compliance_note", "completed_date", "outcome_note",
+    ]
+
     def append_interaction(self, row: dict) -> None:
-        """Append a new interaction row to the Interactions tab."""
+        """Append a new interaction row to the Interactions tab (column-ordered)."""
         try:
             ws = self._spreadsheet.worksheet(TAB_INTERACTIONS)
-            # Append in column order matching the sheet header
-            ws.append_row(list(row.values()))
+            ordered = [row.get(col, "") for col in self.INTERACTION_COLS]
+            ws.append_row(ordered)
             self.invalidate_cache()
             logger.info("Appended interaction for customer: %s", row.get("customer_id"))
         except Exception as e:
@@ -187,10 +204,11 @@ class SheetsService:
             raise
 
     def append_task(self, row: dict) -> None:
-        """Append a new task row to the Tasks_NBA tab."""
+        """Append a new task row to the Tasks_NBA tab (column-ordered)."""
         try:
             ws = self._spreadsheet.worksheet(TAB_TASKS)
-            ws.append_row(list(row.values()))
+            ordered = [row.get(col, "") for col in self.TASK_COLS]
+            ws.append_row(ordered)
             self.invalidate_cache()
             logger.info("Appended task for customer: %s", row.get("customer_id"))
         except Exception as e:
