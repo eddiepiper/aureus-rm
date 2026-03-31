@@ -245,3 +245,206 @@ def format_next_best_action(ctx: dict) -> str:
     lines.append("")
     lines.append("_Internal RM use only. Not for client distribution._")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# V3 — Equity Research Plugin fallbacks
+# Used when Claude API is unavailable. Returns structured template output.
+# ---------------------------------------------------------------------------
+
+def _mock_banner_equity(ctx: dict) -> str:
+    label = ctx.get("source_label", "MOCK / NOT REAL-TIME")
+    return f"⚠️ *{label}*\n\n"
+
+
+def format_earnings_deep_dive(ctx: dict) -> str:
+    ticker = ctx.get("ticker", "")
+    earnings = ctx.get("earnings", {})
+    catalysts = ctx.get("catalysts", [])
+    risks = ctx.get("risks", [])
+    snap = ctx.get("snapshot", {})
+
+    lines = [_mock_banner_equity(ctx)]
+    lines.append(f"*Earnings Deep Dive — {ticker}*")
+    lines.append("")
+    lines.append("*Snapshot*")
+    lines.append(f"- {snap.get('name', ticker)} | {snap.get('sector', 'N/A')} | {snap.get('geography', 'N/A')}")
+    lines.append("")
+    lines.append("*Key Observations*")
+    if earnings:
+        lines.append(f"- {earnings.get('quarter', 'N/A')}: Revenue {earnings.get('revenue_actual', 'N/A')} vs est {earnings.get('revenue_est', 'N/A')} — {earnings.get('beat_miss', 'N/A')}")
+        lines.append(f"- EPS {earnings.get('eps_actual', 'N/A')} vs est {earnings.get('eps_est', 'N/A')} | Guidance: {earnings.get('guidance_direction', 'N/A')}")
+        lines.append(f"- Management tone: {earnings.get('mgmt_tone', 'N/A')}")
+    else:
+        lines.append("- Earnings data not available.")
+    lines.append("")
+    lines.append("*Key Risks / Watchouts*")
+    for r in risks[:2]:
+        lines.append(f"- {r}")
+    if not risks:
+        lines.append("- No risk data available.")
+    lines.append("")
+    lines.append("*RM Framing*")
+    if catalysts:
+        lines.append(f"- Key near-term catalyst: {catalysts[0]}")
+    lines.append("_Internal RM use only. Not investment advice._")
+    return "\n".join(lines)
+
+
+def format_stock_catalyst(ctx: dict) -> str:
+    ticker = ctx.get("ticker", "")
+    catalysts = ctx.get("catalysts", [])
+    risks = ctx.get("risks", [])
+    thesis = ctx.get("thesis", {})
+    snap = ctx.get("snapshot", {})
+
+    lines = [_mock_banner_equity(ctx)]
+    lines.append(f"*Stock Catalyst — {ticker}*")
+    lines.append("")
+    lines.append("*Snapshot*")
+    lines.append(f"- {snap.get('name', ticker)} | {snap.get('sector', 'N/A')} | Conviction: {thesis.get('conviction', 'N/A')}")
+    lines.append("")
+    lines.append("*Key Observations*")
+    for c in catalysts[:3]:
+        lines.append(f"- {c}")
+    if not catalysts:
+        lines.append("- No catalyst data available.")
+    lines.append("")
+    lines.append("*Key Risks / Watchouts*")
+    for r in risks[:2]:
+        lines.append(f"- {r}")
+    if not risks:
+        lines.append("- No risk data available.")
+    lines.append("")
+    lines.append("*RM Framing*")
+    lines.append(f"- Use these catalysts to frame a forward-looking conversation about {ticker}.")
+    lines.append("_Internal RM use only. Not investment advice._")
+    return "\n".join(lines)
+
+
+def format_thesis_check(ctx: dict) -> str:
+    ticker = ctx.get("ticker", "")
+    thesis = ctx.get("thesis", {})
+    risks = ctx.get("risks", [])
+    snap = ctx.get("snapshot", {})
+
+    lines = [_mock_banner_equity(ctx)]
+    lines.append(f"*Thesis Check — {ticker}*")
+    lines.append("")
+    lines.append("*Snapshot*")
+    lines.append(f"- {snap.get('name', ticker)} | Conviction: {thesis.get('conviction', 'N/A')}")
+    lines.append("")
+    lines.append("*Key Observations*")
+    if thesis.get("bull_case"):
+        lines.append(f"- Bull: {thesis['bull_case']}")
+    if thesis.get("bear_case"):
+        lines.append(f"- Bear: {thesis['bear_case']}")
+    if not thesis:
+        lines.append("- No thesis data available.")
+    lines.append("")
+    lines.append("*Key Risks / Watchouts*")
+    for r in risks[:2]:
+        lines.append(f"- {r}")
+    if not risks:
+        lines.append("- No risk data available.")
+    lines.append("")
+    lines.append("*RM Framing*")
+    lines.append(f"- Raise {ticker} when conviction is High and client mandate aligns with the bull case.")
+    lines.append("_Internal RM use only. Not investment advice._")
+    return "\n".join(lines)
+
+
+def format_idea_generation(ctx: dict) -> str:
+    ideas = ctx.get("ideas", [])
+    profile = ctx.get("client_profile", {})
+
+    lines = [_mock_banner_equity(ctx)]
+    lines.append(f"*Idea Generation — {profile.get('name', 'Client')}*")
+    lines.append("")
+    lines.append("*Snapshot*")
+    lines.append(f"- {profile.get('risk_profile', 'N/A')} | {profile.get('objective', 'N/A')}")
+    lines.append("")
+    lines.append("*Key Observations*")
+    for idea in ideas[:3]:
+        snap = idea.get("snapshot", {})
+        conviction = idea.get("conviction", "N/A")
+        lines.append(f"- {idea['ticker']} ({snap.get('sector', 'N/A')}) — Conviction: {conviction}")
+        if idea.get("catalysts"):
+            lines.append(f"  Key catalyst: {idea['catalysts'][0]}")
+    if not ideas:
+        lines.append("- No ideas available.")
+    lines.append("")
+    lines.append("*Key Risks / Watchouts*")
+    lines.append("- Validate each idea against client suitability before raising. Use /thesis_check [ticker] for detail.")
+    lines.append("")
+    lines.append("*RM Framing*")
+    lines.append("- Present ideas as conversation starters, not recommendations.")
+    lines.append("_Internal RM use only. Not investment advice._")
+    return "\n".join(lines)
+
+
+def format_morning_note(ctx: dict) -> str:
+    ticker = ctx.get("ticker", "")
+    catalysts = ctx.get("catalysts", [])
+    risks = ctx.get("risks", [])
+    thesis = ctx.get("thesis", {})
+    snap = ctx.get("snapshot", {})
+
+    lines = [_mock_banner_equity(ctx)]
+    lines.append(f"*Morning Note — {ticker}*")
+    lines.append("")
+    lines.append("*Snapshot*")
+    lines.append(f"- {snap.get('name', ticker)} | {snap.get('sector', 'N/A')} | {snap.get('geography', 'N/A')}")
+    if snap.get("description"):
+        desc = snap["description"]
+        lines.append(f"- {desc[:120]}{'...' if len(desc) > 120 else ''}")
+    lines.append("")
+    lines.append("*Key Observations*")
+    for c in catalysts[:3]:
+        lines.append(f"- {c}")
+    if not catalysts:
+        lines.append("- No catalyst data available.")
+    lines.append("")
+    lines.append("*Key Risks / Watchouts*")
+    for r in risks[:2]:
+        lines.append(f"- {r}")
+    if not risks:
+        lines.append("- No risk data available.")
+    lines.append("")
+    lines.append("*RM Framing*")
+    conviction = thesis.get("conviction", "N/A")
+    lines.append(f"- Internal conviction: {conviction}. Surface this in morning client touchpoints where mandate allows.")
+    lines.append("_Internal RM use only. Not investment advice._")
+    return "\n".join(lines)
+
+
+def format_portfolio_scenario(ctx: dict) -> str:
+    client_name = ctx.get("client_name", "Client")
+    scenarios_by_ticker = ctx.get("scenarios_by_ticker", [])
+    profile = ctx.get("profile", {})
+
+    lines = [_mock_banner_equity(ctx)]
+    lines.append(f"*Portfolio Scenario — {client_name}*")
+    lines.append("")
+    lines.append("*Snapshot*")
+    lines.append(f"- {profile.get('risk_profile', 'N/A')} | {profile.get('objective', 'N/A')}")
+    lines.append("")
+    lines.append("*Key Observations*")
+    shown = 0
+    for item in scenarios_by_ticker:
+        if shown >= 3:
+            break
+        ticker = item.get("ticker", "")
+        for s in item.get("scenarios", [])[:1]:
+            lines.append(f"- {ticker}: {s['name']} — {s['impact']}. {s['note']}")
+            shown += 1
+    if shown == 0:
+        lines.append("- No scenario data available for current holdings.")
+    lines.append("")
+    lines.append("*Key Risks / Watchouts*")
+    lines.append("- Review concentration in high-impact scenario names before next client meeting.")
+    lines.append("")
+    lines.append("*RM Framing*")
+    lines.append("- Frame scenarios as preparedness, not predictions. Focus on what the RM can action now.")
+    lines.append("_Internal RM use only. Not investment advice._")
+    return "\n".join(lines)
