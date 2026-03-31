@@ -120,7 +120,7 @@ def _make_chat_handler(router: CommandRouter, sheets: Optional[SheetsService] = 
         resolution = chat_router.resolve(chat_id, text)
 
         if resolution.ready:
-            await update.message.reply_text("⏳ Fetching data...", parse_mode="Markdown")
+            await update.message.reply_text("⏳ Reviewing the portfolio…", parse_mode="Markdown")
             try:
                 response = await router.route(resolution.command, resolution.args)
             except Exception as e:
@@ -162,7 +162,7 @@ def _make_command_handler(command_name: str, router: CommandRouter, sheets: Opti
             )
             return
 
-        await update.message.reply_text("⏳ Fetching data...", parse_mode="Markdown")
+        await update.message.reply_text("⏳ Reviewing the portfolio…", parse_mode="Markdown")
 
         response = await router.route(command_name, list(args))
 

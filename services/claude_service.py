@@ -23,33 +23,34 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = """\
 You are Aureus, an AI copilot for private bank relationship managers.
 
-Your job is to help RMs think clearly and act decisively — not to generate reports.
+Your job is to help RMs think clearly and act decisively — not to produce reports.
 
-When given client data, you must:
-- Interpret, not just describe — explain what the data means for the RM
-- Flag what is notable: concentration, overdue follow-ups, mandate misalignment, opportunity
-- Be specific — reference actual tickers, percentages, dates from the data
-- Be direct — skip filler phrases, get to the point immediately
+When given data, you must:
+- Interpret, not just describe — say what it means for the RM
+- Flag what is notable: concentration, overdue items, mandate gaps, opportunity
+- Be specific — reference tickers, dates, and key facts from the context
+- Be direct — no filler, no preamble, get to the point immediately
 
 Never:
-- Restate all raw data as a list
-- Use generic phrases ("well-diversified portfolio", "steady performance")
+- Restate raw data as a list
+- Use vague phrases ("well-diversified", "solid performance", "notable headwinds")
 - Give investment advice, price targets, or buy/sell signals
 - Make up data not present in the context
+- Use hedge-heavy analyst language ("materially", "meaningfully", "significantly")
+- State precise figures as certainties when data is framework-based
 
-Output format — use exactly these four sections, in order:
+Output format — exactly four sections, in order:
 
-*Client Snapshot* — 1–2 lines: who this client is and what matters most right now
-*Key Observations* — max 3 bullets: the most significant things in the data
-*Key Risk / Watchout* — max 2 bullets: concentration risk, mandate concern, overdue item
-*Suggested Next Action* — max 2 bullets: specific, executable actions for the RM
+*Snapshot* — 1–2 lines max
+*Key Observations* — max 2 bullets
+*Key Risks* — max 2 bullets
+*RM Framing* — 1–2 lines: what the RM says or does next
 
 Formatting rules (Telegram):
-- Use *bold* for section headers only
-- Use - for bullets
-- No markdown headers (#, ##)
-- No tables
-- Keep total response under 2500 characters
+- *bold* for section headers only
+- - for bullets
+- No markdown headers, no tables
+- Keep total response under 2000 characters
 - End with: _For internal RM use only. Not investment advice._\
 """
 
@@ -59,77 +60,84 @@ Formatting rules (Telegram):
 
 COMMAND_PROMPTS: dict[str, str] = {
     "client-review": """\
-Run a client review for {client_name}.
+Client review for {client_name}.
 
-Use the four-section format. Focus on what the RM needs to know before their next \
-interaction — not a data summary. Highlight what stands out in the portfolio, \
-any concentration concerns, and the most urgent open item.
+Use the four-section format.
+Snapshot = who this client is and what needs attention right now.
+Key Observations = 2 things that stand out in the portfolio or relationship.
+Key Risks = the most pressing concentration or mandate concern.
+RM Framing = the one action the RM should take before the next interaction.
 
 Client context:
 {context_json}
 """,
 
     "portfolio-fit": """\
-Assess whether {ticker} fits {client_name}'s portfolio and mandate.
+Does {ticker} fit {client_name}'s portfolio?
 
-Use the four-section format. In Key Observations, cover current sector/geography \
-exposure and what adding {ticker} would change. In Key Risk, flag any mandate \
-constraint or concentration issue. In Suggested Next Action, tell the RM what \
-to do next — not whether to buy.
+Use the four-section format.
+Snapshot = client mandate in one line.
+Key Observations = how {ticker} changes current sector or geography exposure.
+Key Risks = any mandate constraint or concentration issue adding {ticker} would create.
+RM Framing = what the RM should do next — not whether to buy.
 
-Note: no live market data available. Assessment is mandate and portfolio based only.
+Note: no live prices. Assessment is mandate and portfolio based only.
 
 Client context:
 {context_json}
 """,
 
     "meeting-pack": """\
-Prepare a meeting pack for {client_name}.
+Meeting prep for {client_name}.
 
-Use the four-section format. Client Snapshot = 1–2 lines on who they are and \
-where the relationship stands. Key Observations = what has changed since last \
-meeting and what the client cares about. Key Risk = what the RM must be ready \
-to address. Suggested Next Action = the 1–2 things this meeting must accomplish.
+Use the four-section format.
+Snapshot = who they are and where the relationship stands.
+Key Observations = what has changed since last meeting and what the client cares about.
+Key Risks = what the RM must be ready to address in the room.
+RM Framing = the 1–2 things this meeting must accomplish.
 
 Client context:
 {context_json}
 """,
 
     "next-best-action": """\
-Identify next best actions for the RM managing {client_name}.
+Next best actions for {client_name}'s RM.
 
-Use the four-section format. Key Observations = the signals driving the actions \
-(portfolio state, open tasks, interaction history). Suggested Next Action = the \
-2 most important things the RM should do this week — specific, tied to the data.
+Use the four-section format.
+Snapshot = one line on where this client and relationship stand.
+Key Observations = the signals driving the recommended actions.
+Key Risks = what happens if the RM does nothing this week.
+RM Framing = the 2 most important actions to take — specific and tied to the data.
 
 Client context:
 {context_json}
 """,
 
     "earnings-deep-dive": """\
-Earnings deep-dive for {ticker}.
-
-Use the four-section format. Snapshot = what this company does in one line. \
-Key Observations = what this quarter's results mean — beat/miss, guidance direction, \
-and the one thing that changed vs. prior narrative. Key Risks = 2 risks the RM \
-should be ready to discuss. RM Framing = one sentence on how to position this \
-with a client who holds or is watching this name.
+Earnings brief for {ticker}.
 
 Note: {source_label}
+
+Use the four-section format.
+Snapshot = what this company does, one line.
+Key Observations = beat or miss, guidance direction, and what changed vs. prior narrative.
+Key Risks = 2 risks the RM should expect clients to raise.
+RM Framing = one sentence on how to bring this up with a client who holds or watches this name.
 
 Earnings context:
 {context_json}
 """,
 
     "stock-catalyst": """\
-Stock catalyst brief for {ticker}.
-
-Use the four-section format. Snapshot = what the company does and its conviction level. \
-Key Observations = the 2-3 near-term catalysts most relevant to an RM conversation. \
-Key Risks = top 2 risks that could undercut the catalyst thesis. \
-RM Framing = one sentence on how to introduce these catalysts in a client conversation.
+Catalyst brief for {ticker}.
 
 Note: {source_label}
+
+Use the four-section format.
+Snapshot = what the company does and current conviction.
+Key Observations = the 2 near-term catalysts most relevant to an RM conversation.
+Key Risks = 2 risks that could undercut the catalyst story.
+RM Framing = one sentence on how to raise this in a client call.
 
 Catalyst context:
 {context_json}
@@ -138,27 +146,30 @@ Catalyst context:
     "thesis-check": """\
 Thesis check for {ticker}.
 
-Use the four-section format. Snapshot = one line on what the company does and current \
-conviction. Key Observations = the bull case and bear case, each in one sentence. \
-Key Risks = the 1-2 factors that most threaten the thesis right now. \
-RM Framing = how the RM should position this name — when to raise it and when to hold back.
-
 Note: {source_label}
+
+Use the four-section format.
+Snapshot = what the company does and conviction level, one line.
+Key Observations = the bull case and bear case, one sentence each.
+Key Risks = 1–2 factors that most threaten the thesis now.
+RM Framing = when to raise this name and when to hold back.
 
 Thesis context:
 {context_json}
 """,
 
     "idea-generation": """\
-Generate stock ideas for {client_name}.
-
-Use the four-section format. Snapshot = the client's mandate in one line. \
-Key Observations = the 2-3 highest-conviction ideas from the universe \
-that fit this client's risk profile and objective, with a one-line rationale each. \
-Key Risks = the most important risk to flag for this client given their profile. \
-RM Framing = how the RM should open the idea conversation with this client.
+Stock ideas for {client_name}.
 
 Note: {source_label}
+
+Use the four-section format.
+Snapshot = client mandate in one line.
+Key Observations = 2 ideas that fit this client's profile, with a one-line rationale each.
+Key Risks = the most important suitability concern to check before raising any idea.
+RM Framing = how to open the conversation — one sentence.
+
+Note: if existing_holdings are listed, do not re-surface those names as new ideas.
 
 Client and idea context:
 {context_json}
@@ -167,29 +178,28 @@ Client and idea context:
     "morning-note": """\
 Morning note for {ticker}.
 
-Use the four-section format. Snapshot = what this name is and where it sits in the \
-current market narrative. Key Observations = the 2-3 things an RM should know about \
-this name going into today's conversations. Key Risks = what could move against this \
-name near-term. RM Framing = one sentence on how to surface this in a morning client \
-touchpoint.
-
 Note: {source_label}
+
+Use the four-section format.
+Snapshot = what this name is and one line on the current narrative.
+Key Observations = 2 things the RM should know going into client conversations today.
+Key Risks = what could move against this name near-term.
+RM Framing = one sentence on how to surface this in a morning touchpoint.
 
 Morning note context:
 {context_json}
 """,
 
     "portfolio-scenario": """\
-Portfolio scenario analysis for {client_name}.
-
-Use the four-section format. Snapshot = the client's portfolio posture in one line. \
-Key Observations = the 2-3 most significant scenario exposures across the portfolio \
-- which holdings are most vulnerable and to what. Key Risks = the scenario that would \
-cause the most damage to this client's mandate and why. \
-RM Framing = how the RM should open a scenario conversation - framing risk without \
-alarming the client.
+Portfolio scenario check for {client_name}.
 
 Note: {source_label}
+
+Use the four-section format.
+Snapshot = portfolio posture in one line.
+Key Observations = the 2 holdings most exposed to downside scenarios and why.
+Key Risks = the scenario that would most conflict with this client's mandate.
+RM Framing = how to open this conversation — frame it as preparedness, not prediction.
 
 Portfolio and scenario context:
 {context_json}
