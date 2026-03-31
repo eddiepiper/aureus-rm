@@ -30,21 +30,23 @@ from services.sheets_service import SheetsService
 logger = logging.getLogger(__name__)
 
 HELP_TEXT = """
-*Aureus RM Copilot*
+*Aureus RM Copilot — V3*
 
-Available commands:
+*V2 — Client & Portfolio*
+/client\\_review [name] — Full client review
+/portfolio\\_fit [name] [ticker] — Portfolio fit check
+/meeting\\_pack [name] — Meeting prep pack
+/next\\_best\\_action [name] — Suggested next actions
 
-/client-review [name]
-_Full client review with holdings, interactions, and actions._
+*V3 — Equity Research*
+/earnings\\_deep\\_dive [ticker] — Earnings results deep dive
+/stock\\_catalyst [ticker] — Near-term catalyst brief
+/thesis\\_check [ticker] — Bull/bear thesis check
+/idea\\_generation [name] — Mandate-aware stock ideas
+/morning\\_note [ticker] — Morning briefing for a name
 
-/portfolio-fit [name] [ticker]
-_Check if a stock fits the client's portfolio and mandate._
-
-/meeting-pack [name]
-_Meeting prep pack with agenda and talking points._
-
-/next-best-action [name]
-_Suggested next actions for the RM._
+*V3 — Portfolio Intelligence*
+/portfolio\\_scenario [name] — Portfolio scenario analysis
 
 /help — show this message
 """
@@ -71,6 +73,14 @@ def build_application(
     app.add_handler(CommandHandler("portfolio_fit",    _make_command_handler("portfolio-fit",    router, sheets_service)))
     app.add_handler(CommandHandler("meeting_pack",     _make_command_handler("meeting-pack",     router, sheets_service)))
     app.add_handler(CommandHandler("next_best_action", _make_command_handler("next-best-action", router, sheets_service)))
+    # V3 — Equity Research Plugin
+    app.add_handler(CommandHandler("earnings_deep_dive", _make_command_handler("earnings-deep-dive", router, sheets_service)))
+    app.add_handler(CommandHandler("stock_catalyst",     _make_command_handler("stock-catalyst",     router, sheets_service)))
+    app.add_handler(CommandHandler("thesis_check",       _make_command_handler("thesis-check",       router, sheets_service)))
+    app.add_handler(CommandHandler("idea_generation",    _make_command_handler("idea-generation",    router, sheets_service)))
+    app.add_handler(CommandHandler("morning_note",       _make_command_handler("morning-note",       router, sheets_service)))
+    # V3 — Wealth Management Plugin
+    app.add_handler(CommandHandler("portfolio_scenario", _make_command_handler("portfolio-scenario", router, sheets_service)))
 
     # Natural-language messages (non-command text)
     app.add_handler(
