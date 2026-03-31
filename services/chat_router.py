@@ -46,16 +46,49 @@ INTENTS = {
         "help", "what can you do", "commands", "how do i",
         "what are your commands", "options",
     ],
+    "earnings_deep_dive": [
+        "earnings", "results", "quarterly results", "earnings deep dive",
+        "how did", "how did it do", "beat", "miss", "guidance",
+    ],
+    "stock_catalyst": [
+        "catalyst", "catalysts", "what's driving", "whats driving",
+        "what could move", "near term", "upcoming", "what to watch",
+    ],
+    "thesis_check": [
+        "thesis", "bull case", "bear case", "investment case",
+        "why own", "why hold", "conviction", "view on",
+    ],
+    "idea_generation": [
+        "ideas for", "stock ideas", "what should i look at",
+        "what fits", "suggest something for",
+        "what would work for", "any ideas",
+    ],
+    "morning_note": [
+        "morning note", "morning brief", "morning update",
+        "what to know about", "quick brief on", "brief on",
+    ],
+    "portfolio_scenario": [
+        "scenario", "portfolio scenario", "stress test",
+        "what if", "downside scenario", "risk scenario",
+        "portfolio risk", "what happens if",
+    ],
 }
 
 HELP_TEXT = (
     "*Aureus RM Copilot* — what I can do:\n\n"
+    "*V2 Client & Portfolio:*\n"
     "- *Client Review* — `review John Tan`\n"
     "- *Meeting Pack* — `meeting pack for John Tan`\n"
     "- *Next Best Actions* — `what should I do for John Tan`\n"
-    "- *Portfolio Fit* — `does DBS fit John Tan's portfolio`\n\n"
-    "Or use slash commands:\n"
-    "/client\\_review · /meeting\\_pack · /next\\_best\\_action · /portfolio\\_fit"
+    "- *Portfolio Fit* — `does DBS fit John Tan`\n\n"
+    "*V3 Equity Research:*\n"
+    "- *Earnings* — `how did NVDA do this quarter`\n"
+    "- *Catalyst* — `what's driving TSM`\n"
+    "- *Thesis* — `bull case for AAPL`\n"
+    "- *Ideas* — `any ideas for John Tan`\n"
+    "- *Morning Note* — `morning brief on DBS`\n"
+    "- *Portfolio Scenario* — `stress test John Tan's portfolio`\n\n"
+    "Or use slash commands — type /help."
 )
 
 # Ticker pattern: 1-5 uppercase letters optionally followed by .XX exchange suffix
@@ -67,6 +100,14 @@ NOT_TICKERS = {
     "MY", "ME", "HIS", "HER", "DID", "DO", "BE", "AM", "ARE",
     "CAN", "DOES", "CEO", "CFO", "COO", "RM", "AUM", "NBA",
     "SGD", "USD", "HKD", "EUR", "GBP",
+    # Common sentence words that match ticker pattern
+    "HOW", "WHAT", "WHY", "WHO", "ANY", "ALL", "NEW", "OLD",
+    "BUY", "SELL", "OWN", "RUN", "GET", "LET", "PUT", "USE",
+    "HAS", "HAD", "WAS", "NOT", "BUT", "YET", "NOW", "ON",
+    "UP", "AT", "BY", "IF", "OF", "SO", "AS",
+    "BULL", "BEAR", "CASE", "VIEW", "MISS", "BEAT",
+    "NEAR", "TERM", "NEXT", "LAST", "THIS",
+    "JOHN", "TAN", "QUICK", "BRIEF", "WHAT'S",
 }
 
 
@@ -237,26 +278,51 @@ def resolve(chat_id: str, text: str) -> ChatResolution:
         return ChatResolution(reply=HELP_TEXT)
 
     state.intent = intent
-    state.client_name = _extract_client_name(stripped, intent)
-    state.ticker = _extract_ticker(stripped) if intent == "portfolio_fit" else None
     state.waiting_for = None
 
-    # Ask for missing args
-    if not state.client_name:
-        state.waiting_for = "client_name"
-        prompts = {
-            "client_review":     "Sure — which client would you like a review for?",
-            "meeting_pack":      "Happy to help prep. Which client is the meeting for?",
-            "next_best_action":  "Which client should I suggest next actions for?",
-            "portfolio_fit":     "Which client are you assessing?",
-        }
-        return ChatResolution(reply=prompts.get(intent, "Which client?"))
+    TICKER_COMMANDS = {"earnings_deep_dive", "stock_catalyst", "thesis_check", "morning_note"}
+    CLIENT_COMMANDS_V3 = {"idea_generation", "portfolio_scenario"}
 
-    if intent == "portfolio_fit" and not state.ticker:
-        state.waiting_for = "ticker"
-        return ChatResolution(
-            reply=f"Got it — *{state.client_name}*. Which ticker are you looking at?"
-        )
+    if intent in TICKER_COMMANDS:
+        state.ticker = _extract_ticker(stripped)
+        state.client_name = None
+        if not state.ticker:
+            state.waiting_for = "ticker"
+            prompts = {
+                "earnings_deep_dive": "Which ticker would you like an earnings deep dive on?",
+                "stock_catalyst":     "Which ticker are you looking at for catalysts?",
+                "thesis_check":       "Which ticker should I check the thesis for?",
+                "morning_note":       "Which ticker or sector would you like a morning note on?",
+            }
+            return ChatResolution(reply=prompts.get(intent, "Which ticker?"))
+    elif intent in CLIENT_COMMANDS_V3:
+        state.ticker = None
+        state.client_name = _extract_client_name(stripped, intent)
+        if not state.client_name:
+            state.waiting_for = "client_name"
+            prompts = {
+                "idea_generation":    "Which client should I generate ideas for?",
+                "portfolio_scenario": "Which client's portfolio should I run scenarios on?",
+            }
+            return ChatResolution(reply=prompts.get(intent, "Which client?"))
+    else:
+        # V2 intents — original logic preserved exactly
+        state.client_name = _extract_client_name(stripped, intent)
+        state.ticker = _extract_ticker(stripped) if intent == "portfolio_fit" else None
+        if not state.client_name:
+            state.waiting_for = "client_name"
+            prompts = {
+                "client_review":    "Sure — which client would you like a review for?",
+                "meeting_pack":     "Happy to help prep. Which client is the meeting for?",
+                "next_best_action": "Which client should I suggest next actions for?",
+                "portfolio_fit":    "Which client are you assessing?",
+            }
+            return ChatResolution(reply=prompts.get(intent, "Which client?"))
+        if intent == "portfolio_fit" and not state.ticker:
+            state.waiting_for = "ticker"
+            return ChatResolution(
+                reply=f"Got it — *{state.client_name}*. Which ticker are you looking at?"
+            )
 
     return _build_resolution(state, chat_id)
 
@@ -264,16 +330,28 @@ def resolve(chat_id: str, text: str) -> ChatResolution:
 def _build_resolution(state: ConversationState, chat_id: str) -> ChatResolution:
     """Map resolved intent + args to a command_router command."""
     command_map = {
+        # V2
         "client_review":    "client-review",
         "meeting_pack":     "meeting-pack",
         "next_best_action": "next-best-action",
         "portfolio_fit":    "portfolio-fit",
+        # V3
+        "earnings_deep_dive": "earnings-deep-dive",
+        "stock_catalyst":     "stock-catalyst",
+        "thesis_check":       "thesis-check",
+        "idea_generation":    "idea-generation",
+        "morning_note":       "morning-note",
+        "portfolio_scenario": "portfolio-scenario",
     }
     command = command_map[state.intent]
-    args = state.client_name.split()
 
-    if state.intent == "portfolio_fit" and state.ticker:
-        args = args + [state.ticker]
+    TICKER_COMMANDS = {"earnings_deep_dive", "stock_catalyst", "thesis_check", "morning_note"}
+    if state.intent in TICKER_COMMANDS:
+        args = [state.ticker] if state.ticker else []
+    else:
+        args = state.client_name.split() if state.client_name else []
+        if state.intent == "portfolio_fit" and state.ticker:
+            args = args + [state.ticker]
 
     logger.info(
         "ChatRouter resolved | chat_id=%s intent=%s client=%s ticker=%s",

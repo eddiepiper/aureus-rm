@@ -18,6 +18,8 @@ from services.config import load_config
 from services.sheets_service import SheetsService, SheetsUnavailableError
 from services.client_service import ClientService
 from services.command_router import CommandRouter
+from services.financial_analysis_service import FinancialAnalysisService
+from services.equity_research_service import EquityResearchService
 from bot.telegram_bot import build_application
 
 
@@ -74,10 +76,16 @@ def main() -> None:
 
     # 4. Services
     client_service = ClientService(sheets=sheets, use_mock=use_mock)
+    # V3 — Core Financial Analysis Layer + Equity Research Plugin
+    financial_analysis = FinancialAnalysisService()
+    equity_research = EquityResearchService(financial_analysis=financial_analysis)
+    logger.info("V3 services initialised | mock_universe=%s", financial_analysis.get_stock_universe())
     router = CommandRouter(
         client_service=client_service,
         claude_service=claude_service,
         sheets_service=sheets,
+        financial_analysis=financial_analysis,
+        equity_research=equity_research,
     )
 
     # 5. Telegram bot
