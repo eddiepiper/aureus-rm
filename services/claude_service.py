@@ -105,6 +105,95 @@ Use the four-section format. Key Observations = the signals driving the actions 
 Client context:
 {context_json}
 """,
+
+    "earnings-deep-dive": """\
+Earnings deep-dive for {ticker}.
+
+Use the four-section format. Snapshot = what this company does in one line. \
+Key Observations = what this quarter's results mean — beat/miss, guidance direction, \
+and the one thing that changed vs. prior narrative. Key Risks = 2 risks the RM \
+should be ready to discuss. RM Framing = one sentence on how to position this \
+with a client who holds or is watching this name.
+
+Note: {source_label}
+
+Earnings context:
+{context_json}
+""",
+
+    "stock-catalyst": """\
+Stock catalyst brief for {ticker}.
+
+Use the four-section format. Snapshot = what the company does and its conviction level. \
+Key Observations = the 2-3 near-term catalysts most relevant to an RM conversation. \
+Key Risks = top 2 risks that could undercut the catalyst thesis. \
+RM Framing = one sentence on how to introduce these catalysts in a client conversation.
+
+Note: {source_label}
+
+Catalyst context:
+{context_json}
+""",
+
+    "thesis-check": """\
+Thesis check for {ticker}.
+
+Use the four-section format. Snapshot = one line on what the company does and current \
+conviction. Key Observations = the bull case and bear case, each in one sentence. \
+Key Risks = the 1-2 factors that most threaten the thesis right now. \
+RM Framing = how the RM should position this name — when to raise it and when to hold back.
+
+Note: {source_label}
+
+Thesis context:
+{context_json}
+""",
+
+    "idea-generation": """\
+Generate stock ideas for {client_name}.
+
+Use the four-section format. Snapshot = the client's mandate in one line. \
+Key Observations = the 2-3 highest-conviction ideas from the universe \
+that fit this client's risk profile and objective, with a one-line rationale each. \
+Key Risks = the most important risk to flag for this client given their profile. \
+RM Framing = how the RM should open the idea conversation with this client.
+
+Note: {source_label}
+
+Client and idea context:
+{context_json}
+""",
+
+    "morning-note": """\
+Morning note for {ticker}.
+
+Use the four-section format. Snapshot = what this name is and where it sits in the \
+current market narrative. Key Observations = the 2-3 things an RM should know about \
+this name going into today's conversations. Key Risks = what could move against this \
+name near-term. RM Framing = one sentence on how to surface this in a morning client \
+touchpoint.
+
+Note: {source_label}
+
+Morning note context:
+{context_json}
+""",
+
+    "portfolio-scenario": """\
+Portfolio scenario analysis for {client_name}.
+
+Use the four-section format. Snapshot = the client's portfolio posture in one line. \
+Key Observations = the 2-3 most significant scenario exposures across the portfolio \
+- which holdings are most vulnerable and to what. Key Risks = the scenario that would \
+cause the most damage to this client's mandate and why. \
+RM Framing = how the RM should open a scenario conversation - framing risk without \
+alarming the client.
+
+Note: {source_label}
+
+Portfolio and scenario context:
+{context_json}
+""",
 }
 
 
@@ -123,22 +212,35 @@ class ClaudeService:
         template = COMMAND_PROMPTS.get(command)
         if not template:
             return (
-                f"Run {command} for this client.\n\n"
+                f"Run {command} for this context.\n\n"
                 f"Context:\n{json.dumps(ctx, indent=2, default=str)}"
             )
 
+        # Client name — works for compressed ('profile' key) and raw ('customer' key) shapes
         customer = ctx.get("profile") or ctx.get("customer", {})
         client_name = (
             customer.get("name")
             or customer.get("preferred_name")
             or customer.get("full_name")
+            or ctx.get("client_profile", {}).get("name")
             or "the client"
         )
-        ticker = ctx.get("ticker_requested") or ctx.get("ticker", "")
+
+        # Ticker — direct key
+        ticker = (
+            ctx.get("ticker_requested")
+            or ctx.get("ticker")
+            or ctx.get("ticker_a", "")
+            or ""
+        )
+
+        # source_label for mock data banner in prompt
+        source_label = ctx.get("source_label", "MOCK / NOT REAL-TIME")
 
         return template.format(
             client_name=client_name,
             ticker=ticker,
+            source_label=source_label,
             context_json=json.dumps(ctx, indent=2, default=str),
         )
 
