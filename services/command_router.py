@@ -100,7 +100,7 @@ class CommandRouter:
         customer = ctx.get("customer", {})
 
         profile = {
-            "name": customer.get("preferred_name") or customer.get("full_name"),
+            "name": customer.get("full_name") or customer.get("preferred_name"),
             "segment": customer.get("segment"),
             "risk_profile": customer.get("risk_profile"),
             "objective": customer.get("investment_objective"),
@@ -210,12 +210,20 @@ class CommandRouter:
     # ------------------------------------------------------------------
 
     async def _generate(self, command: str, raw_ctx: dict) -> str:
-        """Compress context, then try Claude; fall back to template on failure."""
-        compressed = self._compress_context(raw_ctx)
+        """Try Claude with (possibly compressed) context; fall back to template on failure.
+
+        V2 client commands produce raw ClientService contexts (have a 'customer' key)
+        and need compression before Claude. V3 equity/portfolio contexts are already
+        in their final shape and must NOT be compressed — doing so would strip all data.
+        """
+        if "customer" in raw_ctx:
+            ctx_for_claude = self._compress_context(raw_ctx)
+        else:
+            ctx_for_claude = raw_ctx
 
         if self.claude:
             try:
-                return await self.claude.generate(command, compressed)
+                return await self.claude.generate(command, ctx_for_claude)
             except Exception as e:
                 logger.warning("Claude failed for %s, using template fallback: %s", command, e)
 

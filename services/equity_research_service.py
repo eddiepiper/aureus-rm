@@ -103,6 +103,10 @@ class EquityResearchService:
 
         ideas.sort(key=lambda x: conviction_order.get(x["conviction"], 3))
 
+        existing_tickers = [
+            h.get("ticker") for h in client_ctx.get("top_holdings", []) if h.get("ticker")
+        ]
+
         return {
             "is_mock": True,
             "data_freshness": "framework-based",
@@ -113,5 +117,6 @@ class EquityResearchService:
                 "objective": profile.get("objective", ""),
                 "sector_restrictions": profile.get("sector_restrictions", ""),
             },
+            "existing_holdings": existing_tickers,
             "ideas": ideas[:3],
         }

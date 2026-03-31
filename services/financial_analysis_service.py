@@ -10,6 +10,13 @@ Phase 2+: pass a live `connector` instance to replace mock lookups without chang
 
 from services.mock_data import MOCK_STOCKS
 
+# Map exchange-suffixed tickers (from client holdings) to MOCK_STOCKS keys.
+# Add entries here as the mock universe grows.
+_TICKER_ALIASES: dict = {
+    "D05.SI": "DBS",
+    "U11.SI": "UOB",
+}
+
 _STUB_TEMPLATE = {
     "is_mock": True,
     "data_freshness": "framework-based",
@@ -39,8 +46,12 @@ class FinancialAnalysisService:
     # ------------------------------------------------------------------
 
     def get_stock(self, ticker: str) -> dict:
-        """Return full mock record for ticker, or a labelled stub if unknown."""
-        key = ticker.upper()
+        """Return full mock record for ticker, or a labelled stub if unknown.
+
+        Exchange-suffixed tickers (e.g. D05.SI) are normalised via _TICKER_ALIASES
+        so holdings stored with exchange suffixes resolve to their MOCK_STOCKS key.
+        """
+        key = _TICKER_ALIASES.get(ticker.upper(), ticker.upper())
         if key in MOCK_STOCKS:
             return MOCK_STOCKS[key]
         stub = dict(_STUB_TEMPLATE)
