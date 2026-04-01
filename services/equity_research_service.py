@@ -107,7 +107,7 @@ class EquityResearchService:
             h.get("ticker") for h in client_ctx.get("top_holdings", []) if h.get("ticker")
         ]
 
-        return {
+        result = {
             "is_mock": True,
             "data_freshness": "framework-based",
             "source_label": "MOCK / NOT REAL-TIME",
@@ -116,7 +116,14 @@ class EquityResearchService:
                 "risk_profile": profile.get("risk_profile", ""),
                 "objective": profile.get("objective", ""),
                 "sector_restrictions": profile.get("sector_restrictions", ""),
+                "deployment_style": profile.get("deployment_style") or client_ctx.get("profile", {}).get("deployment_style"),
             },
             "existing_holdings": existing_tickers,
             "ideas": ideas[:3],
         }
+
+        # Pass deployable liquidity through so Claude can frame ideas as deployment opportunities
+        if client_ctx.get("liquidity"):
+            result["liquidity"] = client_ctx["liquidity"]
+
+        return result

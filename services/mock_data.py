@@ -25,6 +25,7 @@ MOCK_CUSTOMER = {
     "last_review_date": "2024-09-01",
     "next_review_due": "2025-03-01",
     "notes_summary": "Client interested in dividend income. Cautious about China exposure.",
+    "deployment_style": "Phased",
 }
 
 MOCK_HOLDINGS = [
@@ -81,6 +82,26 @@ MOCK_HOLDINGS = [
         "unrealized_pnl_pct": 31.8,
         "income_yield_pct": 1.5,
         "conviction_level": "High",
+        "deployable_flag": "No",
+    },
+    {
+        "holding_id": "H012",
+        "customer_id": "CUST001",
+        "ticker": "CASA-SGD",
+        "security_name": "SGD CASA Account",
+        "asset_class": "Cash",
+        "sector": "Cash",
+        "geography": "Singapore",
+        "currency": "SGD",
+        "units": 1,
+        "avg_cost": 20000.00,
+        "current_price": 20000.00,
+        "market_value": 20000.0,
+        "portfolio_weight_pct": 20.0,
+        "unrealized_pnl_pct": 0.0,
+        "income_yield_pct": 0.05,
+        "conviction_level": "High",
+        "deployable_flag": "Yes",
     },
 ]
 

@@ -112,9 +112,10 @@ class CommandRouter:
             "last_review_date": customer.get("last_review_date"),
             "next_review_due": customer.get("next_review_due"),
             "notes": customer.get("notes_summary") or None,
+            "deployment_style": customer.get("deployment_style") or None,
         }
 
-        # Holdings: top 5 by weight, key metrics only
+        # Holdings: separate CASA (deployable_flag=Yes) from invested positions
         holdings = ctx.get("holdings", [])
         def _safe_float(v):
             try:
@@ -122,8 +123,15 @@ class CommandRouter:
             except (TypeError, ValueError):
                 return 0.0
 
-        sorted_holdings = sorted(
-            holdings, key=lambda h: _safe_float(h.get("portfolio_weight_pct")), reverse=True
+        def _is_casa(h: dict) -> bool:
+            return str(h.get("deployable_flag", "")).strip().lower() in ("yes", "y")
+
+        casa_holdings = [h for h in holdings if _is_casa(h)]
+        invested_holdings = [h for h in holdings if not _is_casa(h)]
+
+        # Top 5 invested positions by weight — CASA excluded from investment analysis
+        sorted_invested = sorted(
+            invested_holdings, key=lambda h: _safe_float(h.get("portfolio_weight_pct")), reverse=True
         )
         top_holdings = [
             {
@@ -135,13 +143,13 @@ class CommandRouter:
                 "geography": h.get("geography"),
                 "conviction": h.get("conviction_level"),
             }
-            for h in sorted_holdings[:5]
+            for h in sorted_invested[:5]
         ]
 
-        # Sector and geography concentration
+        # Sector and geography concentration — invested positions only
         sector_weights: dict[str, float] = {}
         geo_weights: dict[str, float] = {}
-        for h in holdings:
+        for h in invested_holdings:
             sector_weights[h.get("sector", "Other")] = (
                 sector_weights.get(h.get("sector", "Other"), 0) + _safe_float(h.get("portfolio_weight_pct"))
             )
@@ -156,6 +164,23 @@ class CommandRouter:
         if geo_weights:
             top_g = max(geo_weights.items(), key=lambda x: x[1])
             concentration["top_geography"] = f"{top_g[0]} {top_g[1]:.0f}%"
+
+        # Deployable liquidity summary — only present if CASA rows exist
+        liquidity = None
+        if casa_holdings:
+            total_pct = sum(_safe_float(h.get("portfolio_weight_pct")) for h in casa_holdings)
+            liquidity = {
+                "total_deployable_pct": round(total_pct, 1),
+                "holdings": [
+                    {
+                        "ticker": h.get("ticker"),
+                        "currency": h.get("currency"),
+                        "market_value": h.get("market_value"),
+                        "weight_pct": h.get("portfolio_weight_pct"),
+                    }
+                    for h in casa_holdings
+                ],
+            }
 
         # Interactions: last 3, distilled
         interactions = ctx.get("interactions", [])
@@ -188,6 +213,9 @@ class CommandRouter:
             "open_tasks": open_tasks,
             "is_mock": ctx.get("is_mock", False),
         }
+
+        if liquidity:
+            compressed["liquidity"] = liquidity
 
         if "ticker" in ctx:
             compressed["ticker_requested"] = ctx["ticker"]
@@ -427,4 +455,6 @@ class CommandRouter:
             "top_holdings": compressed.get("top_holdings", []),
             "scenarios_by_ticker": scenarios_by_ticker,
         }
+        if compressed.get("liquidity"):
+            ctx["liquidity"] = compressed["liquidity"]
         return await self._generate("portfolio-scenario", ctx)
