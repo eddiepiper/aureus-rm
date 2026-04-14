@@ -20,6 +20,9 @@ from services.client_service import ClientService
 from services.command_router import CommandRouter
 from services.financial_analysis_service import FinancialAnalysisService
 from services.equity_research_service import EquityResearchService
+from services.portfolio_counsellor_agent import PortfolioCounsellorAgent
+from services.equity_analyst_agent import EquityAnalystAgent
+from services.aureus_orchestrator import AureusOrchestrator
 from bot.telegram_bot import build_application
 
 
@@ -80,9 +83,23 @@ def main() -> None:
     financial_analysis = FinancialAnalysisService()
     equity_research = EquityResearchService(financial_analysis=financial_analysis)
     logger.info("V3 services initialised | mock_universe=%s", financial_analysis.get_stock_universe())
+
+    # Internal specialist agents + orchestrator (only wired when Claude is available)
+    generation_backend = claude_service
+    if claude_service:
+        portfolio_counsellor = PortfolioCounsellorAgent(claude_service=claude_service)
+        equity_analyst = EquityAnalystAgent(claude_service=claude_service)
+        generation_backend = AureusOrchestrator(
+            portfolio_counsellor=portfolio_counsellor,
+            equity_analyst=equity_analyst,
+            financial_analysis=financial_analysis,
+            claude_service=claude_service,
+        )
+        logger.info("Aureus two-agent architecture enabled")
+
     router = CommandRouter(
         client_service=client_service,
-        claude_service=claude_service,
+        claude_service=generation_backend,
         sheets_service=sheets,
         financial_analysis=financial_analysis,
         equity_research=equity_research,

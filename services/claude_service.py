@@ -307,15 +307,25 @@ class ClaudeService:
             context_json=json.dumps(ctx, indent=2, default=str),
         )
 
-    async def generate(self, command: str, ctx: dict) -> str:
+    async def generate(
+        self,
+        command: str,
+        ctx: dict,
+        system_prompt: Optional[str] = None,
+    ) -> str:
         """
         Async: call Claude and return a Telegram-ready response string.
         ctx should already be compressed by command_router._compress_context().
+
+        system_prompt: if provided, overrides the default SYSTEM_PROMPT.
+        Specialist agents pass their own persona here; the orchestrator synthesis
+        step passes the Aureus SYSTEM_PROMPT directly via generate_raw().
         """
-        is_mock = ctx.pop("is_mock", False)
+        is_mock = ctx.get("is_mock", False)
         mock_banner = "⚠️ *MOCK DATA* — illustrative only\n\n" if is_mock else ""
 
         user_prompt = self._build_user_prompt(command, ctx)
+        effective_system = system_prompt or SYSTEM_PROMPT
 
         logger.info("Claude API call | command=%s | model=%s", command, self.model)
 
@@ -323,7 +333,51 @@ class ClaudeService:
             message = await self.async_client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                system=SYSTEM_PROMPT,
+                system=effective_system,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            text = message.content[0].text
+            logger.info(
+                "Claude response | in=%d out=%d tokens",
+                message.usage.input_tokens,
+                message.usage.output_tokens,
+            )
+            return mock_banner + text
+
+        except anthropic.AuthenticationError:
+            logger.error("Claude auth failed — check ANTHROPIC_API_KEY")
+            raise
+        except anthropic.RateLimitError:
+            logger.warning("Claude rate limit hit")
+            raise
+        except Exception as e:
+            logger.exception("Claude API error: %s", e)
+            raise
+
+    async def generate_raw(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        is_mock: bool = False,
+        max_tokens: Optional[int] = None,
+    ) -> str:
+        """
+        Low-level Claude call with explicit system and user prompts.
+
+        Used by specialist agents for collaboration analysis (brief bullets)
+        and by AureusOrchestrator for synthesis (final unified response).
+        Bypasses COMMAND_PROMPTS template rendering.
+        """
+        mock_banner = "⚠️ *MOCK DATA* — illustrative only\n\n" if is_mock else ""
+        tokens = max_tokens or self.max_tokens
+
+        logger.info("Claude API call (raw) | model=%s | max_tokens=%d", self.model, tokens)
+
+        try:
+            message = await self.async_client.messages.create(
+                model=self.model,
+                max_tokens=tokens,
+                system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )
             text = message.content[0].text
