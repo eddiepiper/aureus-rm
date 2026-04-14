@@ -11,7 +11,7 @@ import logging
 from typing import Optional
 
 from services.sheets_service import SheetsService, SheetsUnavailableError
-from services import mock_data
+from services import mock_data  # noqa: F401 — used for mock fallbacks
 
 logger = logging.getLogger(__name__)
 
@@ -120,5 +120,68 @@ class ClientService:
             "holdings": self._get_holdings(cid),
             "tasks": self._get_tasks(cid),
             "interactions": self._get_interactions(cid, limit=3),
+            "is_mock": self.use_mock or self.sheets is None,
+        }
+
+    # ------------------------------------------------------------------
+    # V5.1 — New context builders
+    # ------------------------------------------------------------------
+
+    def build_relationship_status_context(self, client_name: str) -> dict:
+        """
+        Assemble context for /relationship-status command.
+        Returns: customer, holdings (compressed), interactions (last 5), open tasks
+        """
+        customer = self._resolve_customer(client_name)
+        cid = customer["customer_id"]
+        return {
+            "customer": customer,
+            "holdings": self._get_holdings(cid),
+            "interactions": self._get_interactions(cid, limit=5),
+            "tasks": self._get_tasks(cid),
+            "is_mock": self.use_mock or self.sheets is None,
+        }
+
+    def build_overdue_followups_context(self, client_name: str) -> dict:
+        """
+        Assemble context for /overdue-followups command.
+        Returns: customer, tasks, recent interactions
+        """
+        customer = self._resolve_customer(client_name)
+        cid = customer["customer_id"]
+        return {
+            "customer": customer,
+            "tasks": self._get_tasks(cid),
+            "interactions": self._get_interactions(cid, limit=3),
+            "is_mock": self.use_mock or self.sheets is None,
+        }
+
+    def build_all_customers_context(self) -> list[dict]:
+        """
+        Return a minimal context list for all customers.
+        Used by /attention-list and /morning-rm-brief.
+        Each entry contains only the customer record (relationship and portfolio
+        contexts are enriched separately by CommandRouter / RelationshipMemoryService).
+        """
+        if self.use_mock or self.sheets is None:
+            return [{"customer": mock_data.MOCK_CUSTOMER}]
+        customers = self.sheets.list_all_customers()
+        return [{"customer": c} for c in customers if c.get("customer_id")]
+
+    def build_log_response_context(
+        self,
+        client_name: str,
+        response_status: str,
+        ticker: Optional[str] = None,
+    ) -> dict:
+        """
+        Assemble context for /log-response command.
+        No holdings or interactions needed — just customer ID and the response.
+        """
+        customer = self._resolve_customer(client_name)
+        return {
+            "customer": customer,
+            "client_response": response_status,
+            "ticker": ticker,
             "is_mock": self.use_mock or self.sheets is None,
         }
