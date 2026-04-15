@@ -409,7 +409,8 @@ def build_duplicate_key(
       CUST001:followup:NVDA:idea_generation
       CUST001:review:none:meeting_pack
     """
+    cid = customer_id.strip().upper()
     ticker_part = linked_ticker.upper().strip() if linked_ticker else "none"
     category = task_category.lower().strip().replace(" ", "_").replace("-", "_")
     family = intent_family.lower().strip().replace(" ", "_").replace("-", "_")
-    return f"{customer_id}:{category}:{ticker_part}:{family}"
+    return f"{cid}:{category}:{ticker_part}:{family}"
