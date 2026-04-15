@@ -304,14 +304,18 @@ class RelationshipMemoryService:
 
     def _mock_relationship_context(self) -> dict:
         """Minimal mock context for dev/test mode when Sheets is unavailable."""
+        today = date.today()
+        last_interaction = today - timedelta(days=150)
+        overdue_due = today - timedelta(days=120)
+        followup_due = today - timedelta(days=105)
         return {
-            "last_interaction_date": "2024-11-15",
+            "last_interaction_date": last_interaction.isoformat(),
             "days_since_last_contact": 150,
             "last_interaction_type": "Portfolio Review",
             "recent_interaction_count": 2,
             "recent_interactions": [
                 {
-                    "date": "2024-11-15",
+                    "date": last_interaction.isoformat(),
                     "type": "Portfolio Review",
                     "channel": "Phone",
                     "summary": "Quarterly review. Client happy with DBS performance. Queried about adding more tech exposure.",
@@ -319,7 +323,7 @@ class RelationshipMemoryService:
                     "recommendation_given": "",
                     "client_response": "",
                     "follow_up_required": "Yes",
-                    "follow_up_due": "2024-12-01",
+                    "follow_up_due": followup_due.isoformat(),
                 },
             ],
             "overdue_tasks": [
@@ -328,9 +332,9 @@ class RelationshipMemoryService:
                     "title": "Send tech exposure options",
                     "task_type": "Follow-up",
                     "urgency": "Medium",
-                    "due_date": "2024-12-15",
+                    "due_date": overdue_due.isoformat(),
                     "days_overdue": 120,
-                    "rationale": "Client expressed interest in tech during Nov review",
+                    "rationale": "Client expressed interest in tech during quarterly review",
                     "linked_ticker": "",
                 }
             ],
@@ -341,7 +345,7 @@ class RelationshipMemoryService:
                     "title": "Send tech exposure options",
                     "type": "Follow-up",
                     "urgency": "Medium",
-                    "due_date": "2024-12-15",
+                    "due_date": overdue_due.isoformat(),
                     "is_overdue": True,
                     "linked_ticker": "",
                 }
