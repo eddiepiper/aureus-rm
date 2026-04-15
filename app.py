@@ -129,6 +129,7 @@ def main() -> None:
         equity_research=equity_research,
         relationship_memory=relationship_memory,
         writeback_service=writeback_service,
+        nba_agent=nba_agent if claude_service else None,
     )
 
     # 6b. Chat router (with session continuity via RelationshipMemoryService)

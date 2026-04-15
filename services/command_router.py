@@ -34,6 +34,7 @@ class CommandRouter:
         equity_research=None,
         relationship_memory=None,
         writeback_service=None,
+        nba_agent=None,
     ):
         self.client = client_service
         self.claude = claude_service
@@ -42,6 +43,7 @@ class CommandRouter:
         self.er = equity_research
         self.relationship_memory = relationship_memory
         self.writeback = writeback_service
+        self.nba_agent = nba_agent
 
         if self.claude:
             logger.info("CommandRouter: Claude API enabled")
@@ -55,6 +57,8 @@ class CommandRouter:
             logger.info("CommandRouter: RelationshipMemoryService attached")
         if self.writeback:
             logger.info("CommandRouter: WritebackService attached")
+        if self.nba_agent:
+            logger.info("CommandRouter: NBAAgent attached")
 
     # ------------------------------------------------------------------
     # Main router
@@ -552,6 +556,29 @@ class CommandRouter:
         enriched = self._enrich_with_relationship_memory(compressed, cid)
         return await self._generate("overdue-followups", enriched)
 
+    def _build_customer_inputs(self, all_entries: list) -> list[dict]:
+        """
+        Enrich each customer entry with relationship context.
+        Returns list of {customer, relationship_ctx, portfolio_ctx} dicts
+        ready for NBAAgent.score_all_customers().
+        """
+        result = []
+        for entry in all_entries:
+            customer = entry.get("customer", {})
+            cid = customer.get("customer_id", "")
+            relationship_ctx = {}
+            if self.relationship_memory and cid:
+                try:
+                    relationship_ctx = self.relationship_memory.summarize_relationship_state(cid)
+                except Exception as exc:
+                    logger.debug("Relationship context failed for %s: %s", cid, exc)
+            result.append({
+                "customer": customer,
+                "relationship_ctx": relationship_ctx,
+                "portfolio_ctx": {},
+            })
+        return result
+
     async def _attention_list(self, args: list) -> str:
         """
         Load all customers, score each with NBA Agent signals,
@@ -559,27 +586,15 @@ class CommandRouter:
         """
         is_mock = self.client.use_mock or self.client.sheets is None
         all_entries = self.client.build_all_customers_context()
+        customer_inputs = self._build_customer_inputs(all_entries)
 
-        # Enrich each customer with relationship context
-        scored_inputs = []
-        for entry in all_entries:
-            customer = entry.get("customer", {})
-            cid = customer.get("customer_id", "")
-            relationship_ctx = {}
-            portfolio_ctx = {}
-            if self.relationship_memory and cid:
-                try:
-                    relationship_ctx = self.relationship_memory.summarize_relationship_state(cid)
-                except Exception as exc:
-                    logger.debug("Relationship context failed for %s: %s", cid, exc)
-            scored_inputs.append({
-                "customer": customer,
-                "relationship_ctx": relationship_ctx,
-                "portfolio_ctx": portfolio_ctx,
-            })
+        if self.nba_agent:
+            scored_clients = self.nba_agent.score_all_customers(customer_inputs)
+        else:
+            scored_clients = customer_inputs
 
         ctx = {
-            "scored_clients": scored_inputs,
+            "scored_clients": scored_clients,
             "is_mock": is_mock,
         }
         return await self._generate("attention-list", ctx)
@@ -590,26 +605,15 @@ class CommandRouter:
         """
         is_mock = self.client.use_mock or self.client.sheets is None
         all_entries = self.client.build_all_customers_context()
+        customer_inputs = self._build_customer_inputs(all_entries)
 
-        scored_inputs = []
-        for entry in all_entries:
-            customer = entry.get("customer", {})
-            cid = customer.get("customer_id", "")
-            relationship_ctx = {}
-            portfolio_ctx = {}
-            if self.relationship_memory and cid:
-                try:
-                    relationship_ctx = self.relationship_memory.summarize_relationship_state(cid)
-                except Exception as exc:
-                    logger.debug("Relationship context failed for %s: %s", cid, exc)
-            scored_inputs.append({
-                "customer": customer,
-                "relationship_ctx": relationship_ctx,
-                "portfolio_ctx": portfolio_ctx,
-            })
+        if self.nba_agent:
+            scored_clients = self.nba_agent.score_all_customers(customer_inputs)
+        else:
+            scored_clients = customer_inputs
 
         ctx = {
-            "scored_clients": scored_inputs,
+            "scored_clients": scored_clients,
             "is_mock": is_mock,
         }
         return await self._generate("morning-rm-brief", ctx)
