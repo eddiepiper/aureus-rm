@@ -287,7 +287,12 @@ async def _help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def _split_message(text: str, limit: int = 4000) -> list[str]:
-    """Split a long message into chunks that fit Telegram's 4096-char limit."""
+    """Split a long message into chunks that fit Telegram's 4096-char limit.
+
+    Splits on newlines to avoid cutting mid-word. Avoids splitting inside a
+    Markdown bold span (*text*) by checking asterisk parity before committing
+    to a split point.
+    """
     if len(text) <= limit:
         return [text]
     chunks = []
@@ -298,6 +303,12 @@ def _split_message(text: str, limit: int = 4000) -> list[str]:
         split_at = text.rfind("\n", 0, limit)
         if split_at == -1:
             split_at = limit
+        candidate = text[:split_at]
+        # Walk back one more newline if we'd split inside a *bold* span
+        if candidate.count("*") % 2 != 0:
+            prev_newline = candidate.rfind("\n")
+            if prev_newline > 0:
+                split_at = prev_newline
         chunks.append(text[:split_at])
         text = text[split_at:].lstrip("\n")
     return chunks
