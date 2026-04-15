@@ -346,6 +346,8 @@ class ChatRouter:
                 return ChatResolution(
                     reply="Which client did you speak with? (e.g. `John Tan interested NVDA`)"
                 )
+            state.response_status = _extract_response_status(stripped)
+            state.ticker = _extract_ticker(stripped)
 
         # V3 client commands
         elif intent in _CLIENT_COMMANDS_V3:
@@ -512,6 +514,18 @@ def _extract_client_name(text: str, intent: str) -> Optional[str]:
         return " ".join(w.title() for w in words)
     if len(words) == 1 and words[0][0].isupper():
         return words[0]
+    return None
+
+
+_RESPONSE_STATUSES = {"interested", "neutral", "declined", "pending"}
+
+
+def _extract_response_status(text: str) -> Optional[str]:
+    """Extract a response status keyword from natural language text."""
+    lower = text.lower()
+    for status in _RESPONSE_STATUSES:
+        if status in lower:
+            return status
     return None
 
 
