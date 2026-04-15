@@ -328,6 +328,24 @@ class NBAAgent:
             reason_codes.append("OPEN_TASK")
             source_signals["open_task_count"] = len(non_overdue)
 
+        # 7. Concentration risk — task title mentions concentration/overweight/exposure
+        all_tasks = overdue_tasks + open_tasks
+        for task in all_tasks:
+            title = str(task.get("title", "")).lower()
+            if any(kw in title for kw in ("concentration", "overweight", "exposure")):
+                score += SIGNAL_SCORES["CONCENTRATION_RISK"]
+                reason_codes.append("CONCENTRATION_RISK")
+                source_signals["concentration_task"] = task.get("title")
+                break  # only count once
+
+        # 8. Open watchlist items not yet actioned
+        watchlist_items = relationship_ctx.get("watchlist_items", [])
+        if watchlist_items:
+            count = min(len(watchlist_items), 2)
+            score += SIGNAL_SCORES["OPEN_WATCHLIST"] * count
+            reason_codes.append("OPEN_WATCHLIST")
+            source_signals["watchlist_count"] = len(watchlist_items)
+
         confidence = "high" if score >= 50 else "medium" if score >= 25 else "low"
 
         return {
