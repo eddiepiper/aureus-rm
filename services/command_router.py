@@ -13,8 +13,6 @@ into a signal-rich summary so Claude generates insight, not reports.
 
 import json
 import logging
-import datetime
-import uuid
 from typing import Optional
 
 from services.client_service import ClientService, ClientNotFoundError
@@ -34,12 +32,18 @@ class CommandRouter:
         sheets_service: Optional[SheetsService] = None,
         financial_analysis=None,
         equity_research=None,
+        relationship_memory=None,
+        writeback_service=None,
+        nba_agent=None,
     ):
         self.client = client_service
         self.claude = claude_service
         self.sheets = sheets_service
         self.fa = financial_analysis
         self.er = equity_research
+        self.relationship_memory = relationship_memory
+        self.writeback = writeback_service
+        self.nba_agent = nba_agent
 
         if self.claude:
             logger.info("CommandRouter: Claude API enabled")
@@ -49,14 +53,20 @@ class CommandRouter:
             logger.info("CommandRouter: FinancialAnalysisService attached")
         if self.er:
             logger.info("CommandRouter: EquityResearchService attached")
+        if self.relationship_memory:
+            logger.info("CommandRouter: RelationshipMemoryService attached")
+        if self.writeback:
+            logger.info("CommandRouter: WritebackService attached")
+        if self.nba_agent:
+            logger.info("CommandRouter: NBAAgent attached")
 
     # ------------------------------------------------------------------
     # Main router
     # ------------------------------------------------------------------
 
-    async def route(self, command: str, args: list) -> str:
+    async def route(self, command: str, args: list, chat_id: str = "") -> str:
         handlers = {
-            # V2 — unchanged
+            # V2 — Client & Portfolio
             "client-review":    self._client_review,
             "portfolio-fit":    self._portfolio_fit,
             "meeting-pack":     self._meeting_pack,
@@ -69,6 +79,12 @@ class CommandRouter:
             "morning-note":        self._morning_note,
             # V3 — Wealth Management Plugin
             "portfolio-scenario":  self._portfolio_scenario,
+            # V5.1 — Relationship Memory + NBA
+            "relationship-status": self._relationship_status,
+            "overdue-followups":   self._overdue_followups,
+            "attention-list":      self._attention_list,
+            "morning-rm-brief":    self._morning_rm_brief,
+            "log-response":        self._log_response,
         }
         handler = handlers.get(command)
         if handler is None:
@@ -77,15 +93,52 @@ class CommandRouter:
                 "V2: /client\\_review · /portfolio\\_fit · /meeting\\_pack · /next\\_best\\_action\n"
                 "V3 Equity: /earnings\\_deep\\_dive · /stock\\_catalyst · /thesis\\_check · "
                 "/idea\\_generation · /morning\\_note\n"
-                "V3 Wealth: /portfolio\\_scenario"
+                "V3 Wealth: /portfolio\\_scenario\n"
+                "V5.1: /relationship\\_status · /overdue\\_followups · "
+                "/attention\\_list · /morning\\_rm\\_brief · /log\\_response"
             )
         try:
-            return await handler(args)
+            response = await handler(args)
+            # Update session state after successful execution
+            self._update_session(chat_id, command, args)
+            return response
         except ClientNotFoundError as e:
             return f"❌ {e}"
         except Exception as e:
             logger.exception("Error in /%s: %s", command, e)
             return f"❌ Error running `/{command}`: {e}"
+
+    def _update_session(self, chat_id: str, command: str, args: list) -> None:
+        """Update RelationshipMemoryService session state after a successful command."""
+        if not self.relationship_memory or not chat_id:
+            return
+        updates: dict = {"last_command": command}
+        # Client commands — args are [first_name, last_name, ...]
+        client_commands = {
+            "client-review", "meeting-pack", "next-best-action",
+            "portfolio-fit", "portfolio-scenario", "idea-generation",
+            "relationship-status", "overdue-followups", "log-response",
+        }
+        if command in client_commands and args:
+            # For portfolio-fit: last arg is ticker, rest is name
+            if command == "portfolio-fit" and len(args) >= 2:
+                client_name = " ".join(args[:-1])
+                ticker = args[-1].upper()
+                updates["last_ticker"] = ticker
+            else:
+                client_name = " ".join(args)
+            updates["last_client_name"] = client_name
+        # Ticker commands
+        ticker_commands = {
+            "earnings-deep-dive", "stock-catalyst", "thesis-check", "morning-note"
+        }
+        if command in ticker_commands and args:
+            updates["last_ticker"] = args[0].upper()
+        updates["last_intent"] = command
+        try:
+            self.relationship_memory.update_session_state(chat_id, **updates)
+        except Exception as exc:
+            logger.debug("Session state update failed (non-critical): %s", exc)
 
     # ------------------------------------------------------------------
     # Context compression — distil raw Sheets data for Claude
@@ -274,60 +327,71 @@ class CommandRouter:
         return formatters[command](raw_ctx)
 
     # ------------------------------------------------------------------
-    # Write-back helpers
+    # Write-back helpers (delegate to WritebackService when available)
     # ------------------------------------------------------------------
 
-    def _write_interaction(self, customer_id: str, interaction_type: str, response_summary: str) -> None:
-        if not self.sheets:
+    def _schedule_interaction_log(
+        self,
+        customer_id: str,
+        command: str,
+        response_summary: str,
+        **kwargs,
+    ) -> None:
+        """Non-blocking interaction log via WritebackService."""
+        if not self.writeback:
             return
-        today = datetime.date.today().isoformat()
-        row = {
-            "interaction_id": f"I{uuid.uuid4().hex[:8].upper()}",
-            "customer_id": customer_id,
-            "interaction_date": today,
-            "channel": "Bot",
-            "interaction_type": interaction_type,
-            "summary": f"RM ran {interaction_type} via Aureus bot",
-            "key_topics": "",
-            "sentiment": "",
-            "concern_level": "",
-            "requested_action": "",
-            "agent_response_summary": response_summary[:300],
-            "follow_up_required": "No",
-            "follow_up_due": "",
-            "owner": "RM",
-            "last_updated": today,
-        }
-        try:
-            self.sheets.append_interaction(row)
-        except Exception as e:
-            logger.warning("Write-back failed (interaction): %s", e)
+        self.writeback.schedule_interaction_log(
+            customer_id, command, response_summary, **kwargs
+        )
 
-    def _write_nba_task(self, customer_id: str) -> None:
-        if not self.sheets:
+    def _schedule_followup_task(
+        self,
+        customer_id: str,
+        action_title: str,
+        task_type: str,
+        task_category: str,
+        intent_family: str,
+        **kwargs,
+    ) -> None:
+        """Non-blocking duplicate-aware task creation via WritebackService."""
+        if not self.writeback:
             return
-        today = datetime.date.today().isoformat()
-        row = {
-            "task_id": f"T{uuid.uuid4().hex[:8].upper()}",
-            "customer_id": customer_id,
-            "created_date": today,
-            "task_type": "Review",
-            "action_title": "Review NBA recommendations",
-            "action_detail": "RM reviewed next best actions generated by Aureus bot",
-            "rationale": "Auto-generated by Aureus bot",
-            "urgency": "Medium",
-            "status": "Open",
-            "due_date": "",
-            "owner": "RM",
-            "source": "Bot",
-            "compliance_note": "",
-            "completed_date": "",
-            "outcome_note": "",
-        }
+        self.writeback.schedule_task_creation(
+            customer_id=customer_id,
+            action_title=action_title,
+            task_type=task_type,
+            task_category=task_category,
+            intent_family=intent_family,
+            **kwargs,
+        )
+
+    # ------------------------------------------------------------------
+    # Command handlers
+    # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Relationship memory enrichment helper
+    # ------------------------------------------------------------------
+
+    def _enrich_with_relationship_memory(
+        self, compressed_ctx: dict, customer_id: str
+    ) -> dict:
+        """
+        Inject relationship context into a compressed portfolio context.
+        Returns the original ctx unchanged if RelationshipMemoryService is unavailable.
+        """
+        if not self.relationship_memory:
+            return compressed_ctx
         try:
-            self.sheets.append_task(row)
-        except Exception as e:
-            logger.warning("Write-back failed (task): %s", e)
+            relationship_ctx = self.relationship_memory.summarize_relationship_state(
+                customer_id
+            )
+            return {**compressed_ctx, "relationship_context": relationship_ctx}
+        except Exception as exc:
+            logger.warning(
+                "RelationshipMemory enrichment failed for %s: %s", customer_id, exc
+            )
+            return compressed_ctx
 
     # ------------------------------------------------------------------
     # Command handlers
@@ -340,7 +404,8 @@ class CommandRouter:
         ctx = self.client.build_client_review_context(name)
         response = await self._generate("client-review", ctx)
         if not ctx.get("is_mock"):
-            self._write_interaction(ctx["customer"]["customer_id"], "Client Review", response)
+            cid = ctx["customer"]["customer_id"]
+            self._schedule_interaction_log(cid, "client-review", response)
         return response
 
     async def _portfolio_fit(self, args: list) -> str:
@@ -359,9 +424,15 @@ class CommandRouter:
         if not name:
             return "Usage: `/meeting_pack [client name]`\nExample: `/meeting_pack John Tan`"
         ctx = self.client.build_meeting_pack_context(name)
-        response = await self._generate("meeting-pack", ctx)
+        # Enrich with relationship memory for prior discussion + open follow-ups
         if not ctx.get("is_mock"):
-            self._write_interaction(ctx["customer"]["customer_id"], "Meeting Pack", response)
+            cid = ctx["customer"]["customer_id"]
+            compressed = self._compress_context(ctx)
+            enriched = self._enrich_with_relationship_memory(compressed, cid)
+            response = await self._generate("meeting-pack", enriched)
+            self._schedule_interaction_log(cid, "meeting-pack", response)
+        else:
+            response = await self._generate("meeting-pack", ctx)
         return response
 
     async def _next_best_action(self, args: list) -> str:
@@ -369,11 +440,27 @@ class CommandRouter:
         if not name:
             return "Usage: `/next_best_action [client name]`\nExample: `/next_best_action John Tan`"
         ctx = self.client.build_next_best_action_context(name)
-        response = await self._generate("next-best-action", ctx)
-        if not ctx.get("is_mock"):
-            cid = ctx["customer"]["customer_id"]
-            self._write_interaction(cid, "Next Best Action", response)
-            self._write_nba_task(cid)
+        cid = ctx["customer"]["customer_id"]
+        is_mock = ctx.get("is_mock", False)
+
+        # Enrich with relationship context — NBA Agent uses this for scoring
+        compressed = self._compress_context(ctx)
+        enriched = self._enrich_with_relationship_memory(compressed, cid)
+
+        response = await self._generate("next-best-action", enriched)
+
+        if not is_mock:
+            self._schedule_interaction_log(cid, "next-best-action", response)
+            self._schedule_followup_task(
+                customer_id=cid,
+                action_title="Review and act on NBA recommendations",
+                task_type="Review",
+                task_category="review",
+                intent_family="next_best_action",
+                action_detail="RM reviewed Aureus next best action output",
+                rationale="Auto-created after /next-best-action",
+                urgency="Medium",
+            )
         return response
 
     # ------------------------------------------------------------------
@@ -416,6 +503,15 @@ class CommandRouter:
         client_ctx = self.client.build_client_review_context(name)
         compressed = self._compress_context(client_ctx)
         ctx = self.er.build_idea_context(compressed)
+        # Inject previously discussed topics so the agent avoids re-surfacing them
+        cid = client_ctx["customer"]["customer_id"]
+        if self.relationship_memory:
+            try:
+                prior_topics = self.relationship_memory.get_last_discussed_topics(cid)
+                if prior_topics:
+                    ctx["previously_discussed_topics"] = prior_topics
+            except Exception as exc:
+                logger.debug("Could not fetch prior topics for %s: %s", cid, exc)
         return await self._generate("idea-generation", ctx)
 
     async def _morning_note(self, args: list) -> str:
@@ -426,6 +522,178 @@ class CommandRouter:
             return "❌ EquityResearchService not available."
         ctx = self.er.build_morning_note_context(input_str)
         return await self._generate("morning-note", ctx)
+
+    # ------------------------------------------------------------------
+    # V5.1 — Relationship Memory + NBA command handlers
+    # ------------------------------------------------------------------
+
+    async def _relationship_status(self, args: list) -> str:
+        name = " ".join(args) if args else None
+        if not name:
+            return (
+                "Usage: `/relationship_status [client name]`\n"
+                "Example: `/relationship_status John Tan`"
+            )
+        ctx = self.client.build_relationship_status_context(name)
+        cid = ctx["customer"]["customer_id"]
+        compressed = self._compress_context(ctx)
+        enriched = self._enrich_with_relationship_memory(compressed, cid)
+        response = await self._generate("relationship-status", enriched)
+        if not ctx.get("is_mock"):
+            self._schedule_interaction_log(cid, "relationship-status", response)
+        return response
+
+    async def _overdue_followups(self, args: list) -> str:
+        name = " ".join(args) if args else None
+        if not name:
+            return (
+                "Usage: `/overdue_followups [client name]`\n"
+                "Example: `/overdue_followups John Tan`"
+            )
+        ctx = self.client.build_overdue_followups_context(name)
+        cid = ctx["customer"]["customer_id"]
+        compressed = self._compress_context(ctx)
+        enriched = self._enrich_with_relationship_memory(compressed, cid)
+        return await self._generate("overdue-followups", enriched)
+
+    def _build_customer_inputs(self, all_entries: list) -> list[dict]:
+        """
+        Enrich each customer entry with relationship context.
+        Returns list of {customer, relationship_ctx, portfolio_ctx} dicts
+        ready for NBAAgent.score_all_customers().
+        """
+        result = []
+        for entry in all_entries:
+            customer = entry.get("customer", {})
+            cid = customer.get("customer_id", "")
+            relationship_ctx = {}
+            if self.relationship_memory and cid:
+                try:
+                    relationship_ctx = self.relationship_memory.summarize_relationship_state(cid)
+                except Exception as exc:
+                    logger.debug("Relationship context failed for %s: %s", cid, exc)
+            result.append({
+                "customer": customer,
+                "relationship_ctx": relationship_ctx,
+                "portfolio_ctx": {},
+            })
+        return result
+
+    async def _attention_list(self, args: list) -> str:
+        """
+        Load all customers, score each with NBA Agent signals,
+        and surface the top 5 requiring RM attention.
+        """
+        is_mock = self.client.use_mock or self.client.sheets is None
+        all_entries = self.client.build_all_customers_context()
+        customer_inputs = self._build_customer_inputs(all_entries)
+
+        if self.nba_agent:
+            scored_clients = self.nba_agent.score_all_customers(customer_inputs)
+        else:
+            scored_clients = customer_inputs
+
+        ctx = {
+            "scored_clients": scored_clients,
+            "is_mock": is_mock,
+        }
+        return await self._generate("attention-list", ctx)
+
+    async def _morning_rm_brief(self, args: list) -> str:
+        """
+        Load all customers, score each, and produce the RM's daily brief.
+        """
+        is_mock = self.client.use_mock or self.client.sheets is None
+        all_entries = self.client.build_all_customers_context()
+        customer_inputs = self._build_customer_inputs(all_entries)
+
+        if self.nba_agent:
+            scored_clients = self.nba_agent.score_all_customers(customer_inputs)
+        else:
+            scored_clients = customer_inputs
+
+        ctx = {
+            "scored_clients": scored_clients,
+            "is_mock": is_mock,
+        }
+        return await self._generate("morning-rm-brief", ctx)
+
+    async def _log_response(self, args: list) -> str:
+        """
+        Log a client response after a real-world interaction.
+        Usage: /log_response [client name] [interested|neutral|declined] [optional ticker]
+
+        Examples:
+          /log_response John Tan interested NVDA
+          /log_response Sarah Lim declined
+        """
+        VALID_STATUSES = {"interested", "neutral", "declined", "pending"}
+
+        if len(args) < 2:
+            return (
+                "Usage: `/log_response [client name] [interested|neutral|declined] [optional ticker]`\n"
+                "Example: `/log_response John Tan interested NVDA`"
+            )
+
+        # Parse: last arg may be a ticker, second-to-last is the status
+        possible_status = args[-1].lower()
+        possible_ticker = None
+
+        if possible_status not in VALID_STATUSES and len(args) >= 3:
+            # Last arg is a ticker, second-to-last is status
+            possible_ticker = args[-1].upper()
+            possible_status = args[-2].lower()
+            name_args = args[:-2]
+        elif possible_status in VALID_STATUSES:
+            name_args = args[:-1]
+        else:
+            return (
+                f"❌ Unrecognised response status: `{possible_status}`\n"
+                "Use: `interested`, `neutral`, `declined`, or `pending`."
+            )
+
+        name = " ".join(name_args) if name_args else None
+        if not name:
+            return "❌ Please include the client name. Example: `/log_response John Tan interested NVDA`"
+
+        try:
+            ctx = self.client.build_log_response_context(
+                name, possible_status, ticker=possible_ticker
+            )
+        except Exception as e:
+            return f"❌ {e}"
+
+        is_mock = ctx.get("is_mock", False)
+        cid = ctx["customer"]["customer_id"]
+        client_name = (
+            ctx["customer"].get("full_name")
+            or ctx["customer"].get("preferred_name")
+            or name
+        )
+
+        if not is_mock and self.writeback:
+            success = await self.writeback.log_client_response(
+                customer_id=cid,
+                client_response=possible_status.title(),
+                ticker=possible_ticker,
+            )
+            if success:
+                ticker_note = f" re: {possible_ticker}" if possible_ticker else ""
+                return (
+                    f"✅ Logged: *{client_name}* responded *{possible_status.title()}*"
+                    f"{ticker_note}.\n\n"
+                    "Relationship record updated.\n\n"
+                    "_For internal RM use only. Not investment advice._"
+                )
+            else:
+                return "❌ Failed to log client response. Check your Google Sheets connection."
+        else:
+            ticker_note = f" re: {possible_ticker}" if possible_ticker else ""
+            return (
+                f"⚠️ *MOCK MODE* — would log: *{client_name}* responded "
+                f"*{possible_status.title()}*{ticker_note}.\n\n"
+                "_For internal RM use only. Not investment advice._"
+            )
 
     # ------------------------------------------------------------------
     # V3 — Wealth Management Plugin handler

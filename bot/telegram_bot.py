@@ -5,16 +5,16 @@ Telegram bot interface for Aureus RM Copilot.
 Handles incoming commands and delegates to command_router.
 
 Supported commands:
-  /start
-  /client-review [name]
-  /portfolio-fit [name] [ticker]
-  /meeting-pack [name]
-  /next-best-action [name]
-  /help
+  V2: /client_review  /portfolio_fit  /meeting_pack  /next_best_action
+  V3: /earnings_deep_dive  /stock_catalyst  /thesis_check
+      /idea_generation  /morning_note  /portfolio_scenario
+  V5.1: /relationship_status  /overdue_followups  /attention_list
+        /morning_rm_brief  /log_response
 """
 
 import logging
 from typing import Optional
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -23,14 +23,15 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
 from services.command_router import CommandRouter
-from services import chat_router
+from services.chat_router import ChatRouter
 from services.sheets_service import SheetsService
 
 logger = logging.getLogger(__name__)
 
 HELP_TEXT = """
-*Aureus RM Copilot — V3*
+*Aureus RM Copilot — V5.1*
 
 *V2 — Client & Portfolio*
 /client\\_review [name] — Full client review
@@ -48,6 +49,13 @@ HELP_TEXT = """
 *V3 — Portfolio Intelligence*
 /portfolio\\_scenario [name] — Portfolio scenario analysis
 
+*V5.1 — Relationship Memory & NBA*
+/relationship\\_status [name] — Relationship health overview
+/overdue\\_followups [name] — Overdue items for a client
+/attention\\_list — Ranked clients needing RM attention
+/morning\\_rm\\_brief — Daily RM working brief
+/log\\_response [name] [interested|neutral|declined] [ticker] — Log client response
+
 /help — show this message
 """
 
@@ -56,42 +64,105 @@ def build_application(
     token: str,
     router: CommandRouter,
     sheets_service: Optional[SheetsService] = None,
+    chat_router: Optional[ChatRouter] = None,
 ) -> Application:
     """
     Build and return the Telegram Application with all handlers registered.
 
-    sheets_service: when provided, every non-/start handler validates the
-    sender's Telegram chat_id against the Customers tab before proceeding.
-    Pass None (or omit) to disable access control (mock / dev mode).
+    chat_router: ChatRouter instance with RelationshipMemoryService injected.
+    sheets_service: when provided, validates sender chat_id before every command.
     """
     app = Application.builder().token(token).build()
 
-    # Bind handlers
+    # --- Core handlers ---
     app.add_handler(CommandHandler("start", _start_handler))
-    app.add_handler(CommandHandler("help", _help_handler))
-    app.add_handler(CommandHandler("client_review",    _make_command_handler("client-review",    router, sheets_service)))
-    app.add_handler(CommandHandler("portfolio_fit",    _make_command_handler("portfolio-fit",    router, sheets_service)))
-    app.add_handler(CommandHandler("meeting_pack",     _make_command_handler("meeting-pack",     router, sheets_service)))
-    app.add_handler(CommandHandler("next_best_action", _make_command_handler("next-best-action", router, sheets_service)))
-    # V3 — Equity Research Plugin
-    app.add_handler(CommandHandler("earnings_deep_dive", _make_command_handler("earnings-deep-dive", router, sheets_service)))
-    app.add_handler(CommandHandler("stock_catalyst",     _make_command_handler("stock-catalyst",     router, sheets_service)))
-    app.add_handler(CommandHandler("thesis_check",       _make_command_handler("thesis-check",       router, sheets_service)))
-    app.add_handler(CommandHandler("idea_generation",    _make_command_handler("idea-generation",    router, sheets_service)))
-    app.add_handler(CommandHandler("morning_note",       _make_command_handler("morning-note",       router, sheets_service)))
-    # V3 — Wealth Management Plugin
-    app.add_handler(CommandHandler("portfolio_scenario", _make_command_handler("portfolio-scenario", router, sheets_service)))
+    app.add_handler(CommandHandler("help",  _help_handler))
 
-    # Natural-language messages (non-command text)
+    # --- V2 — Client & Portfolio ---
+    app.add_handler(CommandHandler(
+        "client_review",
+        _make_command_handler("client-review", router, sheets_service),
+    ))
+    app.add_handler(CommandHandler(
+        "portfolio_fit",
+        _make_command_handler("portfolio-fit", router, sheets_service, allow_empty_args=False),
+    ))
+    app.add_handler(CommandHandler(
+        "meeting_pack",
+        _make_command_handler("meeting-pack", router, sheets_service),
+    ))
+    app.add_handler(CommandHandler(
+        "next_best_action",
+        _make_command_handler("next-best-action", router, sheets_service),
+    ))
+
+    # --- V3 — Equity Research ---
+    app.add_handler(CommandHandler(
+        "earnings_deep_dive",
+        _make_command_handler("earnings-deep-dive", router, sheets_service),
+    ))
+    app.add_handler(CommandHandler(
+        "stock_catalyst",
+        _make_command_handler("stock-catalyst", router, sheets_service),
+    ))
+    app.add_handler(CommandHandler(
+        "thesis_check",
+        _make_command_handler("thesis-check", router, sheets_service),
+    ))
+    app.add_handler(CommandHandler(
+        "idea_generation",
+        _make_command_handler("idea-generation", router, sheets_service),
+    ))
+    app.add_handler(CommandHandler(
+        "morning_note",
+        _make_command_handler("morning-note", router, sheets_service),
+    ))
+
+    # --- V3 — Portfolio Intelligence ---
+    app.add_handler(CommandHandler(
+        "portfolio_scenario",
+        _make_command_handler("portfolio-scenario", router, sheets_service),
+    ))
+
+    # --- V5.1 — Relationship Memory & NBA ---
+    app.add_handler(CommandHandler(
+        "relationship_status",
+        _make_command_handler("relationship-status", router, sheets_service),
+    ))
+    app.add_handler(CommandHandler(
+        "overdue_followups",
+        _make_command_handler("overdue-followups", router, sheets_service),
+    ))
+    app.add_handler(CommandHandler(
+        "attention_list",
+        _make_command_handler(
+            "attention-list", router, sheets_service, allow_empty_args=True
+        ),
+    ))
+    app.add_handler(CommandHandler(
+        "morning_rm_brief",
+        _make_command_handler(
+            "morning-rm-brief", router, sheets_service, allow_empty_args=True
+        ),
+    ))
+    app.add_handler(CommandHandler(
+        "log_response",
+        _make_command_handler("log-response", router, sheets_service, allow_empty_args=False),
+    ))
+
+    # --- Natural-language messages ---
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, _make_chat_handler(router, sheets_service))
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            _make_chat_handler(router, sheets_service, chat_router),
+        )
     )
 
     return app
 
 
 def _check_access(chat_id: str, sheets: Optional[SheetsService]) -> bool:
-    """Return True if this chat_id is allowed. Always True when sheets is None (mock mode)."""
+    """Return True if this chat_id is allowed. Always True when sheets is None."""
     if sheets is None:
         return True
     try:
@@ -100,11 +171,18 @@ def _check_access(chat_id: str, sheets: Optional[SheetsService]) -> bool:
         return True  # fail open on Sheets error to avoid locking out RMs
 
 
-def _make_chat_handler(router: CommandRouter, sheets: Optional[SheetsService] = None):
+def _make_chat_handler(
+    router: CommandRouter,
+    sheets: Optional[SheetsService] = None,
+    chat_router_instance: Optional[ChatRouter] = None,
+):
     """
     Factory: returns an async handler for free-text (non-command) messages.
-    Delegates to chat_router for intent detection and multi-turn state.
+    Delegates to ChatRouter for intent detection + session-aware state.
     """
+    # Lazy import fallback module resolver
+    from services import chat_router as _chat_router_module
+
     async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = str(update.effective_chat.id)
         text = update.message.text or ""
@@ -117,12 +195,20 @@ def _make_chat_handler(router: CommandRouter, sheets: Optional[SheetsService] = 
             )
             return
 
-        resolution = chat_router.resolve(chat_id, text)
+        # Use injected ChatRouter instance if available, else module-level fallback
+        if chat_router_instance is not None:
+            resolution = chat_router_instance.resolve(chat_id, text)
+        else:
+            resolution = _chat_router_module.resolve(chat_id, text)
 
         if resolution.ready:
-            await update.message.reply_text("⏳ Reviewing the portfolio…", parse_mode="Markdown")
+            await update.message.reply_text(
+                "⏳ Reviewing the portfolio…", parse_mode="Markdown"
+            )
             try:
-                response = await router.route(resolution.command, resolution.args)
+                response = await router.route(
+                    resolution.command, resolution.args, chat_id=chat_id
+                )
             except Exception as e:
                 logger.exception("Error executing chat-resolved command: %s", e)
                 response = f"❌ Something went wrong: {e}"
@@ -134,17 +220,26 @@ def _make_chat_handler(router: CommandRouter, sheets: Optional[SheetsService] = 
     return handler
 
 
-def _make_command_handler(command_name: str, router: CommandRouter, sheets: Optional[SheetsService] = None):
+def _make_command_handler(
+    command_name: str,
+    router: CommandRouter,
+    sheets: Optional[SheetsService] = None,
+    allow_empty_args: bool = False,
+):
     """
     Factory: returns an async handler that parses args and routes the command.
+
+    allow_empty_args: set True for commands that require no arguments
+    (e.g. /attention_list, /morning_rm_brief).
     """
     async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         chat_id = str(update.effective_chat.id)
         args = context.args or []
+
         logger.info(
             "Command /%s from user %s (id=%s) args=%s",
-            command_name, user.username or user.first_name, user.id, args
+            command_name, user.username or user.first_name, user.id, args,
         )
 
         if not _check_access(chat_id, sheets):
@@ -155,18 +250,20 @@ def _make_command_handler(command_name: str, router: CommandRouter, sheets: Opti
             )
             return
 
-        if not args:
+        if not args and not allow_empty_args:
             await update.message.reply_text(
-                f"Please provide a client name.\nUsage: `/{command_name.replace('-', '_')} [client name]`",
+                f"Please provide the required argument.\n"
+                f"Usage: `/{command_name.replace('-', '_')} [client name]`",
                 parse_mode="Markdown",
             )
             return
 
-        await update.message.reply_text("⏳ Reviewing the portfolio…", parse_mode="Markdown")
+        await update.message.reply_text(
+            "⏳ Reviewing the portfolio…", parse_mode="Markdown"
+        )
 
-        response = await router.route(command_name, list(args))
+        response = await router.route(command_name, list(args), chat_id=chat_id)
 
-        # Telegram has a 4096 char limit per message — split if needed
         for chunk in _split_message(response):
             await update.message.reply_text(chunk, parse_mode="Markdown")
 
@@ -179,8 +276,8 @@ async def _start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"Hello {user.first_name}! 👋\n\n"
         "I'm *Aureus*, your RM Copilot.\n\n"
         "I help you prepare for client meetings, review portfolios, "
-        "and stay on top of next best actions.\n\n"
-        "Type /help to see available commands.",
+        "track relationship follow-ups, and stay on top of next best actions.\n\n"
+        "Type /help to see all available commands.",
         parse_mode="Markdown",
     )
 
@@ -190,7 +287,12 @@ async def _help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def _split_message(text: str, limit: int = 4000) -> list[str]:
-    """Split a long message into chunks that fit Telegram's limit."""
+    """Split a long message into chunks that fit Telegram's 4096-char limit.
+
+    Splits on newlines to avoid cutting mid-word. Avoids splitting inside a
+    Markdown bold span (*text*) by checking asterisk parity before committing
+    to a split point.
+    """
     if len(text) <= limit:
         return [text]
     chunks = []
@@ -198,10 +300,15 @@ def _split_message(text: str, limit: int = 4000) -> list[str]:
         if len(text) <= limit:
             chunks.append(text)
             break
-        # Split at last newline before limit
         split_at = text.rfind("\n", 0, limit)
         if split_at == -1:
             split_at = limit
+        candidate = text[:split_at]
+        # Walk back one more newline if we'd split inside a *bold* span
+        if candidate.count("*") % 2 != 0:
+            prev_newline = candidate.rfind("\n")
+            if prev_newline > 0:
+                split_at = prev_newline
         chunks.append(text[:split_at])
         text = text[split_at:].lstrip("\n")
     return chunks

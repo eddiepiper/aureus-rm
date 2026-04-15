@@ -17,6 +17,7 @@ If credentials are unavailable, the service raises SheetsUnavailableError
 and the caller should fall back to mock data.
 """
 
+import datetime
 import logging
 from typing import Optional
 
@@ -178,17 +179,51 @@ class SheetsService:
             and str(r.get("status", "")).lower() in ("open", "in progress", "pending")
         ]
 
-    # Column order must match bootstrap_google_sheet.py TABS schema exactly
+    # ------------------------------------------------------------------
+    # V5.1 — Book-wide queries (needed for attention list / morning brief)
+    # ------------------------------------------------------------------
+
+    def list_all_customers(self) -> list[dict]:
+        """Return all customer records."""
+        return list(self._get_tab(TAB_CUSTOMERS))
+
+    def list_all_open_tasks(self) -> list[dict]:
+        """Return all open tasks across the entire book."""
+        rows = self._get_tab(TAB_TASKS)
+        return [
+            r for r in rows
+            if str(r.get("status", "")).lower() in ("open", "in progress", "pending")
+        ]
+
+    def list_all_interactions(self, limit_days: int = 90) -> list[dict]:
+        """Return all interactions within the last N days across all customers."""
+        cutoff = (
+            datetime.date.today() - datetime.timedelta(days=limit_days)
+        ).isoformat()
+        rows = self._get_tab(TAB_INTERACTIONS)
+        return [r for r in rows if str(r.get("interaction_date", "")) >= cutoff]
+
+    # Column order must match bootstrap_google_sheet.py TABS schema exactly.
+    # V5.1 fields are appended to preserve backward compatibility.
     INTERACTION_COLS = [
+        # V2 original (15 columns)
         "interaction_id", "customer_id", "interaction_date", "channel",
         "interaction_type", "summary", "key_topics", "sentiment",
         "concern_level", "requested_action", "agent_response_summary",
         "follow_up_required", "follow_up_due", "owner", "last_updated",
+        # V5.1 additions (8 columns — appended)
+        "discussion_tickers", "discussion_themes", "recommendation_given",
+        "recommendation_status", "client_response", "meeting_required",
+        "meeting_date", "created_by",
     ]
     TASK_COLS = [
+        # V2 original (15 columns)
         "task_id", "customer_id", "created_date", "task_type", "action_title",
         "action_detail", "rationale", "urgency", "status", "due_date",
         "owner", "source", "compliance_note", "completed_date", "outcome_note",
+        # V5.1 additions (5 columns — appended)
+        "linked_interaction_id", "linked_ticker", "task_category",
+        "duplicate_key", "priority_score",
     ]
 
     def append_interaction(self, row: dict) -> None:
