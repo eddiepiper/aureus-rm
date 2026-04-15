@@ -129,7 +129,7 @@ class WritebackService:
         if not self.sheets:
             return None
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             interaction_id = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
@@ -195,7 +195,7 @@ class WritebackService:
             return existing.get("task_id")
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             task_id = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
@@ -234,7 +234,7 @@ class WritebackService:
         if not self.sheets:
             return None
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             all_tasks = await asyncio.wait_for(
                 loop.run_in_executor(None, self.sheets.list_all_open_tasks),
                 timeout=_WRITE_TIMEOUT_SECONDS,
