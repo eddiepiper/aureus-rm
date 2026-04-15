@@ -116,8 +116,8 @@ class CommandRouter:
         # Client commands — args are [first_name, last_name, ...]
         client_commands = {
             "client-review", "meeting-pack", "next-best-action",
-            "portfolio-scenario", "idea-generation", "relationship-status",
-            "overdue-followups", "log-response",
+            "portfolio-fit", "portfolio-scenario", "idea-generation",
+            "relationship-status", "overdue-followups", "log-response",
         }
         if command in client_commands and args:
             # For portfolio-fit: last arg is ticker, rest is name
