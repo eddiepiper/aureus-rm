@@ -17,6 +17,7 @@ If credentials are unavailable, the service raises SheetsUnavailableError
 and the caller should fall back to mock data.
 """
 
+import datetime
 import logging
 from typing import Optional
 
@@ -196,7 +197,6 @@ class SheetsService:
 
     def list_all_interactions(self, limit_days: int = 90) -> list[dict]:
         """Return all interactions within the last N days across all customers."""
-        import datetime
         cutoff = (
             datetime.date.today() - datetime.timedelta(days=limit_days)
         ).isoformat()
