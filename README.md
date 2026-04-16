@@ -2,7 +2,7 @@
 
 A Telegram-based copilot for relationship managers in private banking. Single orchestrated assistant — one consistent interface backed by specialized internal modules for client intelligence, equity research, portfolio suitability, and relationship memory.
 
-**Current version:** V7 (production) | **149 tests passing**
+![Aureus Architecture](./Aureus_Architecture.png)
 
 ---
 
