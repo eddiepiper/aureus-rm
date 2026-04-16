@@ -1,47 +1,141 @@
 # Aureus RM Copilot
 
-## Security & Setup
+A Telegram-based copilot for relationship managers in private banking. Single orchestrated assistant — one consistent interface backed by specialized internal modules for client intelligence, equity research, portfolio suitability, and relationship memory.
 
-**Never commit secrets.** This repo is designed to be public-safe out of the box.
-
-| File | Status | Notes |
-|------|--------|-------|
-| `.env` | Excluded by `.gitignore` | Contains all secrets |
-| `credentials/*.json` | Excluded by `.gitignore` | Google service account key |
-| `.env.example` | Safe to commit | Placeholders only, no values |
-
-### First-time setup
-
-```bash
-# 1. Copy the example env file and fill in your values
-cp .env.example .env
-
-# 2. Place your Google service account key
-# (see credentials/README.md for how to obtain it)
-cp ~/Downloads/your-service-account.json credentials/service-account.json
-```
-
-Your `.env` should contain:
-
-```
-TELEGRAM_BOT_TOKEN=        # from @BotFather
-GOOGLE_SHEETS_SPREADSHEET_ID=  # from the sheet URL
-GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/service-account.json
-ANTHROPIC_API_KEY=         # from console.anthropic.com
-ANTHROPIC_MODEL=claude-sonnet-4-6
-ANTHROPIC_MAX_TOKENS=1024
-```
-
-If `GOOGLE_SHEETS_SPREADSHEET_ID` is left blank, the bot runs in **mock mode** using sample data.
+**Current version:** V7 (production) | **149 tests passing**
 
 ---
 
-## Quick Start (Docker)
+## What This Is
+
+Aureus is a command-driven assistant that gives RMs fast access to structured intelligence grounded in their live client data. It automates the data-retrieval and synthesis work that typically precedes a client call or meeting — pulling holdings context, interaction history, suitability constraints, and equity research into a single, consistently-formatted output.
+
+All outputs are internal RM decision-support tools. Aureus does not place orders, generate regulated advice, or produce content for direct client distribution.
+
+---
+
+## What This Is Not
+
+- **Not a trading system** — no orders placed or routed
+- **Not a regulated investment advisor** — all outputs require RM review before use with clients
+- **Not a general-purpose chatbot** — commands are scoped strictly to RM workflows
+
+---
+
+## Architecture
+
+Aureus is a single orchestrated assistant. It presents one consistent copilot interface to the RM; internally, `AureusOrchestrator` routes each request to the appropriate specialist module based on command type. None of the internal modules are exposed directly — all interaction flows through Aureus.
+
+```
+Telegram User
+      ↓
+ ChatRouter           — NL intent resolution + session state (RelationshipMemoryService)
+      ↓
+ CommandRouter        — slash command dispatch + multi-turn argument collection
+      ↓
+ AureusOrchestrator   — routes to specialist module by command type
+  ├─ PortfolioCounsellorAgent    (portfolio review, scenario analysis, fit checks)
+  ├─ EquityAnalystAgent          (equity deep dives, catalyst analysis, thesis checks)
+  ├─ NBAAgent                    (hybrid rule-based scoring + Claude narrative)
+  └─ AIApprovalAgent             (deterministic eligibility logic + Claude memo rendering)
+      ↓
+ Support services
+  ├─ RelationshipMemoryService   — session continuity, client context per RM
+  ├─ WritebackService            — async, deduplication-safe Sheets write-back
+  ├─ ClientService               — client data access (Sheets or mock)
+  └─ ClaudeService               — Anthropic API wrapper; template fallback if unavailable
+      ↓
+ Google Sheets                   — system of record (live data backend)
+```
+
+**Design notes:**
+- All RM interaction goes through Aureus — specialist modules are internal implementation details
+- `AureusOrchestrator` requires Claude; the bot falls back to template responses if the API is unavailable
+- Google Sheets is the current storage layer; mock mode runs without credentials
+- `RelationshipMemoryService` is in-process; memory persists across requests within a session via Sheets write-back
+
+See [docs/architecture.md](docs/architecture.md) for the full service map and data flow.
+
+---
+
+## Commands
+
+### V2 — Client Intelligence
+
+| Command | Usage | Purpose |
+|---------|-------|---------|
+| `/client_review` | `/client_review John Tan` | Full RM review: holdings snapshot, interactions, follow-ups, relationship health |
+| `/portfolio_fit` | `/portfolio_fit John Tan D05.SI` | Evaluate whether a stock fits the client's mandate and portfolio |
+| `/meeting_pack` | `/meeting_pack John Tan` | Full meeting prep: brief, talking points, agenda, suggested actions |
+| `/next_best_action` | `/next_best_action John Tan` | Prioritised next actions based on portfolio state and interactions |
+
+### V3 — Equity Research Plugin
+
+| Command | Usage | Purpose |
+|---------|-------|---------|
+| `/earnings_deep_dive` | `/earnings_deep_dive NVDA` | Deep earnings analysis with model implications |
+| `/stock_catalyst` | `/stock_catalyst TSM` | Near-term catalyst identification for a stock |
+| `/thesis_check` | `/thesis_check AAPL` | Investment thesis validation against current data |
+| `/idea_generation` | `/idea_generation John Tan` | Stock idea generation based on client mandate and deployable liquidity |
+| `/morning_note` | `/morning_note DBS` | Morning briefing note for a ticker or sector |
+
+### V3 — Wealth Management Plugin
+
+| Command | Usage | Purpose |
+|---------|-------|---------|
+| `/portfolio_scenario` | `/portfolio_scenario John Tan` | Portfolio scenario analysis including CASA liquidity |
+
+### V5.1 — Relationship Memory + Next Best Action
+
+| Command | Usage | Purpose |
+|---------|-------|---------|
+| `/relationship_status` | `/relationship_status John Tan` | Full relationship snapshot: memory context, open items, NBA |
+| `/overdue_followups` | `/overdue_followups John Tan` | Overdue follow-up actions for a client |
+| `/attention_list` | `/attention_list` | Book-wide prioritised client list with NBA scoring |
+| `/morning_rm_brief` | `/morning_rm_brief` | Daily morning briefing across the full book |
+| `/log_response` | `/log_response John Tan interested NVDA` | Log client response and update relationship memory |
+
+### V7 — AI Approval Agent
+
+| Command | Usage | Purpose |
+|---------|-------|---------|
+| `/ai_assessment` | `/ai_assessment John Tan` | Generate a structured Accredited Investor eligibility assessment memo |
+
+Supports criteria selection by number (`1`/`2`/`3`/`4`) or text (`income` / `net assets` / `financial assets`). If no criteria is provided, Aureus asks. See [docs/v7_ai_approval.md](docs/v7_ai_approval.md).
+
+---
+
+## Google Sheets Structure
+
+The bot reads from and writes to a Google Spreadsheet with these tabs:
+
+| Tab | Key Columns |
+|-----|-------------|
+| `Customers` | `customer_id`, `full_name`, `risk_profile`, `segment`, `relationship_status`, `attention_flag` |
+| `Holdings` | `customer_id`, `ticker`, `security_name`, `portfolio_weight_pct`, `deployable_cash` |
+| `Interactions` | `customer_id`, `interaction_date`, `channel`, `summary`, `follow_up_required` |
+| `Watchlist` | `customer_id`, `ticker`, `security_name`, `reason_for_interest` |
+| `Tasks_NBA` | `customer_id`, `action_title`, `urgency`, `status`, `due_date`, `nba_score` |
+
+`customer_id` is the join key across all tabs. V5.1 adds relationship memory columns to `Customers` and `Tasks_NBA` — run `python scripts/bootstrap_v51_schema.py` to migrate a live sheet.
+
+---
+
+## Setup
+
+### Prerequisites
+
+- Python 3.11+ (or Docker)
+- Telegram bot token (from [@BotFather](https://t.me/BotFather))
+- Anthropic API key (from [console.anthropic.com](https://console.anthropic.com))
+- Google Sheets spreadsheet + service account JSON (optional — bot runs in mock mode without it)
+
+### Quick Start (Docker)
 
 ```bash
-# 1. Copy and fill in environment variables
+# 1. Copy and fill environment variables
 cp .env.example .env
-# edit .env: add TELEGRAM_BOT_TOKEN and GOOGLE_SHEETS_SPREADSHEET_ID
+# edit .env: add TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY, GOOGLE_SHEETS_SPREADSHEET_ID
 
 # 2. Place Google service account credentials
 cp your-service-account.json credentials/service-account.json
@@ -52,201 +146,55 @@ docker compose up --build
 
 The bot starts polling. Open Telegram, find your bot, and type `/start`.
 
-If Google Sheets credentials are unavailable, the bot runs in **mock mode** using sample data for John Tan (CUST001).
+### Quick Start (Python)
 
----
+```bash
+python3 -m venv venv && venv/bin/pip install -r requirements.txt
+cp .env.example .env  # fill in values
+venv/bin/python app.py
+```
 
-## Environment Variables
+### Mock Mode
+
+Leave `GOOGLE_SHEETS_SPREADSHEET_ID` empty or omit `service-account.json`. The bot starts in mock mode with sample client John Tan (CUST001). All commands work — responses are generated against mock data.
+
+### Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `TELEGRAM_BOT_TOKEN` | Yes | From @BotFather on Telegram |
-| `GOOGLE_SHEETS_SPREADSHEET_ID` | Yes | ID from the spreadsheet URL |
-| `GOOGLE_APPLICATION_CREDENTIALS` | No | Default: `/app/credentials/service-account.json` |
+| `TELEGRAM_BOT_TOKEN` | Yes | From @BotFather |
+| `ANTHROPIC_API_KEY` | Yes | From console.anthropic.com |
+| `ANTHROPIC_MODEL` | No | Default: `claude-sonnet-4-6` |
+| `GOOGLE_SHEETS_SPREADSHEET_ID` | No | Sheet ID from URL — omit to use mock mode |
+| `GOOGLE_APPLICATION_CREDENTIALS` | No | Default: `credentials/service-account.json` |
 | `APP_ENV` | No | `dev` or `prod` (default: `dev`) |
 | `LOG_LEVEL` | No | `DEBUG`, `INFO`, `WARNING` (default: `INFO`) |
 
 ---
 
-## Credentials Setup
+## Testing
 
-1. Create a Google Cloud service account and download the JSON key
-2. Place it at `credentials/service-account.json`
-3. Share your Google Spreadsheet with the service account `client_email`
-4. See `credentials/README.md` for full instructions
+```bash
+# Full suite (108 tests)
+venv/bin/python -m pytest tests/ -q
 
----
-
-## Telegram Commands (MVP)
-
-| Command | Usage | Purpose |
-|---------|-------|---------|
-| `/start` | `/start` | Welcome message |
-| `/help` | `/help` | Show available commands |
-| `/client_review` | `/client_review John Tan` | Full client review |
-| `/portfolio_fit` | `/portfolio_fit John Tan D05.SI` | Portfolio fit check |
-| `/meeting_pack` | `/meeting_pack John Tan` | Meeting prep pack |
-| `/next_best_action` | `/next_best_action John Tan` | Next best actions |
-
----
-
-## Google Sheets Structure
-
-The bot reads from a Google Spreadsheet with these 5 tabs:
-
-| Tab | Key Columns |
-|-----|-------------|
-| `Customers` | `customer_id`, `full_name`, `telegram_chat_id`, `risk_profile`, `segment`, … |
-| `Holdings` | `customer_id`, `ticker`, `security_name`, `portfolio_weight_pct`, … |
-| `Interactions` | `customer_id`, `interaction_date`, `channel`, `summary`, `follow_up_required`, … |
-| `Watchlist` | `customer_id`, `ticker`, `security_name`, `reason_for_interest`, … |
-| `Tasks_NBA` | `customer_id`, `action_title`, `urgency`, `status`, `due_date`, … |
-
-`customer_id` is the join key across all tabs. The first row of each tab must be a header row matching the column names above.
-
----
-
-## How to Test
-
-**With mock data (no credentials needed):**
-- Leave `GOOGLE_SHEETS_SPREADSHEET_ID` empty or omit `service-account.json`
-- The bot will start in mock mode with sample client John Tan (CUST001)
-- Try: `/client_review John Tan`
-
-**With real data:**
-- Populate your Google Sheet with the tab structure above
-- Set credentials and spreadsheet ID in `.env`
-- Run `docker compose up --build`
-
----
-
-## MVP Limitations
-
-- Stock data (prices, fundamentals) is not live — `/portfolio_fit` shows portfolio context only
-- No Claude API integration yet — commands use structured Sheets data, not LLM reasoning
-- Single-user only — no RM identity or access control
-- No write-back to CRM (logging to console only in MVP)
-- Telegram only — no web UI
-
----
-
-## What This Is
-
-Aureus RM Copilot is a Claude Code–integrated assistant for relationship managers and wealth advisors. It provides structured, compliance-aware AI assistance for daily RM workflows: client meeting preparation, stock analysis, portfolio suitability checks, earnings summaries, and next-best-action planning.
-
-All outputs are grounded in live data pulled from internal connectors (CRM, portfolio, suitability, house view, compliance) and external market data sources. Every response carries required disclosures and is validated against internal compliance framing rules before delivery.
-
----
-
-## What This Is Not
-
-- **Not a trading system.** No orders are placed or routed.
-- **Not a regulated investment advisor.** Outputs are decision-support tools for qualified RMs, not client-facing advice.
-- **Not a replacement for RM judgment.** All outputs require human review before use with clients.
-- **Not a general-purpose chatbot.** Commands and skills are scoped strictly to RM workflows. Out-of-scope queries are rejected.
-- **Not production-ready without connector implementation.** All MCP server entries in `.mcp.json` are currently placeholders. See [Connectors and Extension Points](#connectors-and-extension-points).
-
----
-
-## Who It Is For
-
-- **Relationship managers** preparing for client meetings or responding to inbound client inquiries
-- **Wealth advisors** evaluating stock ideas against client mandates
-- **RM team leads** monitoring action item pipelines and coverage quality
-- **Internal build teams** extending the system with new connectors or commands
-
----
-
-## Available Commands
-
-| Command | Syntax | Purpose |
-|---|---|---|
-| `client-review` | `/client-review [client_id or name]` | Full RM review summary: holdings snapshot, recent interactions, open follow-ups, relationship health |
-| `stock-brief` | `/stock-brief [TICKER]` | Concise stock brief: snapshot, key metrics, house view, recent news, risks |
-| `portfolio-fit` | `/portfolio-fit [TICKER] [client_id]` | Evaluate whether a stock fits a specific client's mandate, concentration limits, and sector constraints |
-| `compare-stocks` | `/compare-stocks [TICKER_A] [TICKER_B]` | Side-by-side fundamental and qualitative comparison of two stocks |
-| `meeting-pack` | `/meeting-pack [client_id] [meeting_date]` | Full meeting pack: client brief, portfolio summary, talking points, agenda, suggested actions |
-| `next-best-action` | `/next-best-action [client_id]` | Prioritised next-best-action recommendations based on portfolio state, interactions, and market events |
-| `risk-check` | `/risk-check [TICKER] [client_id]` | Identify suitability, concentration, disclosure, and house view risks before discussing a stock with a client |
-| `earnings-update` | `/earnings-update [TICKER] [quarter]` | Structured earnings summary formatted for RM internal use: beat/miss, guidance, key themes, talking points |
-
----
-
-## Architecture Overview
-
-Aureus is structured around three Claude Code integration layers, all defined under `.claude/`:
-
-1. **Commands** — user-invoked workflows defined as prompt templates in `.claude/commands/`. Each command specifies the tools it calls, the output schema it targets, and the compliance framing it applies.
-2. **Skills** — reusable reasoning modules in `.claude/skills/` that commands invoke for shared logic (e.g. suitability assessment, output formatting, house view integration).
-3. **Hooks** — lifecycle interceptors in `hooks/` that enforce guardrails, validate sources, and log activity to CRM on every response cycle.
-
-MCP servers defined in `.mcp.json` provide the data layer. Aureus does not embed data — all client, portfolio, market, and compliance data is fetched at runtime via MCP tool calls.
-
-See [docs/architecture.md](docs/architecture.md) for the full architecture diagram, data flow, and component dependency map.
-
----
-
-## Guardrails and Compliance
-
-Three hook layers enforce compliance on every interaction:
-
-- **`pre_response_guardrail.py`** — blocks responses that use prohibited language (buy/sell directives, performance guarantees, speculative price targets) or that address out-of-scope topics.
-- **`source_validation.py`** — validates that all data cited in a response was fetched from an authorised MCP tool call in the current session. Rejects responses that cite stale or unattributed data.
-- **`crm_logger.py`** — logs every completed response to the internal notes system via `notes.save_meeting_prep` or `notes.save_action_item`, depending on command type.
-
-All three guardrail behaviors — disclaimer enforcement, prohibited language checking, and source attribution — are active by default. Compliance rules are defined in `.claude/rules/compliance.md`.
-
-See [docs/guardrails.md](docs/guardrails.md) for the full prohibited language list, disclaimer templates, and escalation paths.
-
----
-
-## Connectors and Extension Points
-
-Nine MCP servers are declared in `.mcp.json`. All are currently marked `"placeholder": true` and require real transport and authentication configuration before use:
-
-| Server | Purpose |
-|---|---|
-| `crm` | Client profiles and interaction history |
-| `portfolio` | Holdings, weights, unrealised P&L, exposure breakdown |
-| `suitability` | Risk profiles, mandates, sector exclusions |
-| `market` | Company snapshots, price history |
-| `fundamentals` | Financials, estimates, consensus data |
-| `research` | Earnings summaries, news search |
-| `house_view` | Internal house view ratings and commentary |
-| `compliance` | Disclosure checks, approved product lists |
-| `notes` | Meeting prep save, action item logging |
-
-To wire a connector: replace `"command": "placeholder"` with the actual binary or script path, populate `"args"` with auth and endpoint configuration, and remove `"placeholder": true`.
-
-See [docs/connector-requirements.md](docs/connector-requirements.md) for per-connector interface contracts, expected response shapes, and authentication patterns.
-
----
-
-## How to Test
-
-**Prerequisites:** Claude Code CLI installed and authenticated. Open the repo in Claude Code — `.claude/` is loaded automatically.
-
-**1. Smoke test a command (no live connectors required)**
-
-With placeholder connectors active, commands will return structured prompts with empty data slots. This validates command routing, skill loading, and hook execution:
-```
-/stock-brief AAPL
-/client-review test-client-001
+# Single file
+venv/bin/python -m pytest tests/test_nba_agent.py -v
 ```
 
-**3. Test with stub connectors**
+Tests cover: NBAAgent scoring, WritebackService deduplication, ChatRouter NL resolution, FinancialAnalysisService, guardrail rules, mock data fixtures.
 
-Point each MCP server at a local stub that returns fixture JSON matching the output schemas in `schemas/`. Fixture data for each schema is available in `examples/sample-outputs.md`.
+---
 
-**4. Validate hooks**
+## V5.1 Schema Migration
 
-- Attempt a response containing a prohibited phrase (e.g. "you should buy") — `pre_response_guardrail` should block it.
-- Attempt a response citing data not fetched in-session — `source_validation` should reject it.
-- Confirm a successful response logs to `notes` — check `crm_logger` stdout or stub CRM log.
+If upgrading a live Google Sheet from V4/V5:
 
-**5. End-to-end**
+```bash
+venv/bin/python scripts/bootstrap_v51_schema.py
+```
 
-Wire at least `crm`, `portfolio`, and `suitability` to real or staging endpoints and run `/meeting-pack [client_id] [date]`. Validate the output matches the `meeting_pack` schema in `schemas/meeting_pack.json`.
+This adds V5.1 relationship memory columns non-destructively. Existing data is preserved.
 
 ---
 
@@ -254,60 +202,95 @@ Wire at least `crm`, `portfolio`, and `suitability` to real or staging endpoints
 
 ```
 aureus-rm/
-├── .claude/                     # Claude Code integration (commands, skills, agents, rules, hooks)
-├── .mcp.json                    # MCP server declarations (9 connectors, all placeholder)
-├── README.md
-│
-├── commands/                    # One file per slash command — prompt template + tool call spec
-│   ├── client-review.md
-│   ├── compare-stocks.md
-│   ├── earnings-update.md
-│   ├── meeting-pack.md
-│   ├── next-best-action.md
-│   ├── portfolio-fit.md
-│   ├── risk-check.md
-│   └── stock-brief.md
-│
-├── skills/                      # Reusable reasoning modules loaded by commands
-│   ├── house-view-integration.md
-│   ├── next-best-action-framework.md
-│   ├── output-formatting-rules.md
-│   ├── portfolio-concentration-check.md
-│   ├── rm-client-meeting-prep.md
-│   ├── stock-analysis-framework.md
-│   └── suitability-response-style.md
-│
-├── hooks/                       # Lifecycle interceptors (pre_response, post_tool_call, post_response)
-│   ├── crm_logger.py
-│   ├── pre_response_guardrail.py
-│   └── source_validation.py
-│
-├── schemas/                     # JSON Schemas for structured command outputs
-│   ├── client_context.json
-│   ├── meeting_pack.json
-│   ├── next_best_action.json
-│   ├── portfolio_fit.json
-│   └── stock_brief.json
-│
-├── docs/
-│   ├── architecture.md          # System architecture, data flow, component map
-│   ├── connector-requirements.md # Per-connector interface contracts and auth patterns
-│   ├── guardrails.md            # Prohibited language list, disclaimer templates, escalation
-│   └── implementation-plan.md   # Phased build-out plan
-│
-└── examples/
-    ├── example-prompts.md       # Sample RM prompts for each command
-    └── sample-outputs.md        # Fixture outputs for testing and schema validation
+├── app.py                          # Entry point — boots all services, starts bot
+├── bot/
+│   └── telegram_bot.py             # Telegram handler wiring (thin — no business logic)
+├── services/
+│   ├── aureus_orchestrator.py      # Routes to specialist agents, synthesises output
+│   ├── portfolio_counsellor_agent.py
+│   ├── equity_analyst_agent.py
+│   ├── nba_agent.py                # Hybrid rule-based scoring + Claude narrative
+│   ├── relationship_memory_service.py  # Session continuity per client
+│   ├── writeback_service.py        # Async Sheets write-back with dedup
+│   ├── chat_router.py              # NL resolution + session continuity
+│   ├── command_router.py           # 3-tier command dispatch
+│   ├── client_service.py           # Client data access (Sheets or mock)
+│   ├── sheets_service.py           # Google Sheets connector
+│   ├── financial_analysis_service.py
+│   ├── equity_research_service.py
+│   └── claude_service.py           # Anthropic API wrapper
+├── hooks/
+│   ├── pre_response_guardrail.py   # Blocks prohibited language patterns
+│   ├── source_validation.py        # Validates all data was fetched in-session
+│   └── crm_logger.py               # Logs completed interactions
+├── scripts/
+│   ├── bootstrap_google_sheet.py   # Initial Sheets setup
+│   └── bootstrap_v51_schema.py     # V5.1 column migration
+├── tests/                          # 108 tests — mirrors services/ structure
+├── schemas/                        # JSON Schema for output validation
+├── docs/                           # Architecture, agents, version history, guardrails
+├── .claude/                        # Claude Code integration (commands, skills, rules)
+├── Dockerfile / docker-compose.yml
+└── .env.example
 ```
 
 ---
 
-## Assumptions and Limitations
+## Guardrails and Compliance
 
-- **Connector data quality is the ceiling.** Output quality is bounded by the completeness and freshness of data returned by MCP connectors. Stale CRM data or missing suitability profiles will degrade outputs.
-- **Single-client context per session.** Commands are designed around one client per invocation. Multi-client batch workflows are not supported in v0.1.
-- **No persistent memory across sessions.** Aureus does not maintain conversation state between sessions. Each command invocation is stateless; prior context must be re-supplied or fetched via CRM tools.
-- **House view dependency.** `portfolio-fit`, `risk-check`, and `stock-brief` assume a `house_view` connector is available. Without it, these commands will omit internal view data and flag the gap in output.
-- **Compliance hook scope.** The guardrail hook intercepts Claude-generated text only. It does not validate raw data returned by MCP tools. Data quality and PII handling in connectors are the responsibility of the connector implementation layer.
-- **Schema version pinning.** All schemas are at v0.1. Breaking changes to connector output shapes will require coordinated schema and command updates.
-- **No multi-currency normalisation.** Portfolio values are returned in the currency reported by the `portfolio` connector. Cross-currency aggregation is not performed.
+Three Python hooks enforce compliance on every interaction:
+
+- **`pre_response_guardrail.py`** — blocks responses containing prohibited language (buy/sell directives, guaranteed returns, risk-free claims, speculative price targets)
+- **`source_validation.py`** — validates all cited data was fetched from an authorised source in the current session
+- **`crm_logger.py`** — logs completed interactions to the CRM notes system
+
+Compliance rules are defined in `.claude/rules/compliance.md`. See [docs/guardrails.md](docs/guardrails.md) for the full prohibited language list and escalation paths.
+
+---
+
+## Current Limitations
+
+- **Google Sheets as storage** — no DB layer; query performance degrades at scale
+- **No web UI** — all interaction via Telegram commands
+- **Single data backend** — no external market data integration; equity research uses internal service layer
+- **Schema migration required** — V5.1 columns must be bootstrapped before live relationship memory features work
+- **Session continuity scope** — relationship memory is in-process; does not persist across bot restarts without Sheets write-back
+
+---
+
+## Version History
+
+| Version | Key Changes |
+|---------|-------------|
+| V4 | CASA liquidity tracking, deployable cash in portfolio scenarios, Aureus Signature Output Style |
+| V5 | AureusOrchestrator, Portfolio Counsellor Agent, Equity Analyst Agent, two-agent architecture |
+| V5.1 | RelationshipMemoryService, NBAAgent, WritebackService, session continuity, attention list, morning RM brief, relationship status, overdue follow-ups, /log_response |
+| V7 | AIApprovalAgent, Accredited Investor eligibility assessment, structured memo output, validation + confidence scoring, multi-turn criteria selection |
+
+See [docs/versions.md](docs/versions.md) for the full milestone breakdown.
+
+---
+
+## Recommended Next Phase: V6 Workflow Agent
+
+V6 is not yet built. The recommended next phase is a proactive workflow layer:
+
+- Scheduled morning briefs pushed to the RM without a command trigger
+- Proactive alerts on price moves, earnings, and relationship events
+- Multi-client batch processing across the full book
+- Persistent workflow state machine tracking open action items across sessions
+- Calendar and CRM integration for richer context
+
+See [docs/versions.md](docs/versions.md) for the V6 roadmap note.
+
+---
+
+## Security
+
+| File | Status |
+|------|--------|
+| `.env` | Excluded by `.gitignore` — contains all secrets |
+| `credentials/*.json` | Excluded by `.gitignore` — Google service account key |
+| `.env.example` | Safe to commit — placeholders only |
+
+Never commit `.env` or `credentials/service-account.json`.
