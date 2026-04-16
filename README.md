@@ -132,7 +132,7 @@ The bot reads from a Google Spreadsheet with these 5 tabs:
 
 ## What This Is
 
-Aureus RM Copilot is a Claude Code plugin for relationship managers and wealth advisors. It provides structured, compliance-aware AI assistance for daily RM workflows: client meeting preparation, stock analysis, portfolio suitability checks, earnings summaries, and next-best-action planning.
+Aureus RM Copilot is a Claude Code–integrated assistant for relationship managers and wealth advisors. It provides structured, compliance-aware AI assistance for daily RM workflows: client meeting preparation, stock analysis, portfolio suitability checks, earnings summaries, and next-best-action planning.
 
 All outputs are grounded in live data pulled from internal connectors (CRM, portfolio, suitability, house view, compliance) and external market data sources. Every response carries required disclosures and is validated against internal compliance framing rules before delivery.
 
@@ -153,7 +153,7 @@ All outputs are grounded in live data pulled from internal connectors (CRM, port
 - **Relationship managers** preparing for client meetings or responding to inbound client inquiries
 - **Wealth advisors** evaluating stock ideas against client mandates
 - **RM team leads** monitoring action item pipelines and coverage quality
-- **Internal build teams** extending the plugin with new connectors or commands
+- **Internal build teams** extending the system with new connectors or commands
 
 ---
 
@@ -174,13 +174,13 @@ All outputs are grounded in live data pulled from internal connectors (CRM, port
 
 ## Architecture Overview
 
-The plugin is structured as a Claude Code plugin with three execution layers:
+Aureus is structured around three Claude Code integration layers, all defined under `.claude/`:
 
-1. **Commands** — user-invoked workflows defined as prompt templates in `commands/`. Each command specifies the tools it calls, the output schema it targets, and the compliance framing it applies.
-2. **Skills** — reusable reasoning modules in `skills/` that commands invoke for shared logic (e.g. suitability assessment, output formatting, house view integration).
+1. **Commands** — user-invoked workflows defined as prompt templates in `.claude/commands/`. Each command specifies the tools it calls, the output schema it targets, and the compliance framing it applies.
+2. **Skills** — reusable reasoning modules in `.claude/skills/` that commands invoke for shared logic (e.g. suitability assessment, output formatting, house view integration).
 3. **Hooks** — lifecycle interceptors in `hooks/` that enforce guardrails, validate sources, and log activity to CRM on every response cycle.
 
-MCP servers defined in `.mcp.json` provide the data layer. The plugin does not embed data — all client, portfolio, market, and compliance data is fetched at runtime via MCP tool calls.
+MCP servers defined in `.mcp.json` provide the data layer. Aureus does not embed data — all client, portfolio, market, and compliance data is fetched at runtime via MCP tool calls.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture diagram, data flow, and component dependency map.
 
@@ -194,10 +194,7 @@ Three hook layers enforce compliance on every interaction:
 - **`source_validation.py`** — validates that all data cited in a response was fetched from an authorised MCP tool call in the current session. Rejects responses that cite stale or unattributed data.
 - **`crm_logger.py`** — logs every completed response to the internal notes system via `notes.save_meeting_prep` or `notes.save_action_item`, depending on command type.
 
-Compliance configuration is set in `plugin.json` under `"compliance"`:
-- `disclaimer_required: true` — all outputs append the standard RM disclaimer block.
-- `prohibited_language_check: true` — pre_response hook is active.
-- `source_attribution_required: true` — source_validation hook is active.
+All three guardrail behaviors — disclaimer enforcement, prohibited language checking, and source attribution — are active by default. Compliance rules are defined in `.claude/rules/compliance.md`.
 
 See [docs/guardrails.md](docs/guardrails.md) for the full prohibited language list, disclaimer templates, and escalation paths.
 
@@ -227,14 +224,9 @@ See [docs/connector-requirements.md](docs/connector-requirements.md) for per-con
 
 ## How to Test
 
-**Prerequisites:** Claude Code with plugin support enabled.
+**Prerequisites:** Claude Code CLI installed and authenticated. Open the repo in Claude Code — `.claude/` is loaded automatically.
 
-**1. Load the plugin**
-```
-claude --plugin .claude-plugin/plugin.json
-```
-
-**2. Smoke test a command (no live connectors required)**
+**1. Smoke test a command (no live connectors required)**
 
 With placeholder connectors active, commands will return structured prompts with empty data slots. This validates command routing, skill loading, and hook execution:
 ```
@@ -262,8 +254,7 @@ Wire at least `crm`, `portfolio`, and `suitability` to real or staging endpoints
 
 ```
 aureus-rm/
-├── .claude-plugin/
-│   └── plugin.json              # Plugin manifest: commands, skills, hooks, schemas, compliance config
+├── .claude/                     # Claude Code integration (commands, skills, agents, rules, hooks)
 ├── .mcp.json                    # MCP server declarations (9 connectors, all placeholder)
 ├── README.md
 │
@@ -315,7 +306,7 @@ aureus-rm/
 
 - **Connector data quality is the ceiling.** Output quality is bounded by the completeness and freshness of data returned by MCP connectors. Stale CRM data or missing suitability profiles will degrade outputs.
 - **Single-client context per session.** Commands are designed around one client per invocation. Multi-client batch workflows are not supported in v0.1.
-- **No persistent memory across sessions.** The plugin does not maintain conversation state between sessions. Each command invocation is stateless; prior context must be re-supplied or fetched via CRM tools.
+- **No persistent memory across sessions.** Aureus does not maintain conversation state between sessions. Each command invocation is stateless; prior context must be re-supplied or fetched via CRM tools.
 - **House view dependency.** `portfolio-fit`, `risk-check`, and `stock-brief` assume a `house_view` connector is available. Without it, these commands will omit internal view data and flag the gap in output.
 - **Compliance hook scope.** The guardrail hook intercepts Claude-generated text only. It does not validate raw data returned by MCP tools. Data quality and PII handling in connectors are the responsibility of the connector implementation layer.
 - **Schema version pinning.** All schemas are at v0.1. Breaking changes to connector output shapes will require coordinated schema and command updates.

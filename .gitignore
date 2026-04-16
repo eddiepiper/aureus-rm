@@ -23,7 +23,8 @@ env/
 .vscode/
 *.swp
 
-# JSON — block all except schemas (which are safe to commit)
+# JSON — block all except schemas and Claude Code config (which are safe to commit)
 *.json
 !schemas/*.json
 !.mcp.json
+!.claude/settings.json

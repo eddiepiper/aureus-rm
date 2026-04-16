@@ -4,7 +4,7 @@
 
 ## 1. System Overview
 
-Aureus RM Copilot is a Claude Code plugin that gives relationship managers structured, compliance-aware AI assistance for their daily workflows: client meeting preparation, stock analysis, portfolio suitability checks, earnings summaries, and next-best-action planning. It solves the RM productivity problem — the time and cognitive load required to pull together client context, market data, and portfolio observations before a meeting or client call — by automating data retrieval and output structuring against a consistent, compliance-enforced template. Aureus is not a trading system, a regulated investment advisor, or a general-purpose chatbot. It is a decision-support layer for qualified RMs. All outputs require human review before use with clients. The plugin does not place orders, generate regulated advice, or operate without a human in the loop.
+Aureus RM Copilot is a Claude Code–integrated assistant that gives relationship managers structured, compliance-aware AI assistance for their daily workflows: client meeting preparation, stock analysis, portfolio suitability checks, earnings summaries, and next-best-action planning. It solves the RM productivity problem — the time and cognitive load required to pull together client context, market data, and portfolio observations before a meeting or client call — by automating data retrieval and output structuring against a consistent, compliance-enforced template. Aureus is not a trading system, a regulated investment advisor, or a general-purpose chatbot. It is a decision-support layer for qualified RMs. All outputs require human review before use with clients. Aureus does not place orders, generate regulated advice, or operate without a human in the loop.
 
 ---
 
@@ -126,7 +126,7 @@ Aureus uses five internal agent roles. These are not separate processes — they
 User invokes command (e.g. /portfolio-fit "James Tan" D05.SI)
         |
         v
-Plugin manifest (plugin.json) routes to commands/portfolio-fit.md
+Claude Code reads `.claude/commands/portfolio-fit.md`
         |
         v
 Skills loaded: portfolio-concentration-check.md, suitability-response-style.md,
@@ -174,7 +174,7 @@ Error    Final response delivered to RM
 ## 4. Command Execution Flow
 
 1. **User invokes command** — types `/portfolio-fit "James Tan" D05.SI` in Claude Code
-2. **Plugin manifest loads** — `plugin.json` maps the command name to `commands/portfolio-fit.md` and loads the declared skills
+2. **Command file loaded** — Claude Code reads `.claude/commands/portfolio-fit.md` and loads the referenced skills
 3. **Argument parsing** — command template extracts `client_name = "James Tan"` and `ticker = "D05.SI"`
 4. **Skills applied** — `portfolio-concentration-check.md`, `suitability-response-style.md`, and `output-formatting-rules.md` are injected into the model context as reasoning guides
 5. **MCP tool calls execute** — the model calls each tool specified in the command's Data Retrieval Steps in order (or in parallel where the command permits); tool responses are collected
@@ -274,10 +274,10 @@ A live connector replaces the placeholder transport and authentication configura
 
 ### How to Add a New Command
 
-1. Create a new file in `commands/` named `[command-name].md`
+1. Create a new file in `.claude/commands/` named `[command-name].md`
 2. Define: command purpose, Data Retrieval Steps (list of MCP tool calls with arguments), Output Format (exact section headers and content rules), and Behavioral Rules
-3. Register the command in `.claude-plugin/plugin.json` under `"commands"`, mapping the slash command name to the file path and listing which skills to load
-4. If the command requires a new output schema, add the schema to `schemas/`
+3. If the command requires a new output schema, add the schema to `schemas/`
+4. Document the command in `CLAUDE.md` under the Commands table
 5. Test with placeholder connectors first to validate routing and skill loading
 
 ### How to Add a New MCP Connector
@@ -301,8 +301,7 @@ A live connector replaces the placeholder transport and authentication configura
 1. Create a new JSON Schema file in `schemas/` following the existing naming convention (`[command_name].json`)
 2. Define all required output fields with types and descriptions
 3. Reference the schema in the relevant command file under the Output Format section
-4. Register the schema in `plugin.json` under `"schemas"`
-5. Add fixture data for the schema to `examples/sample-outputs.md` to support stub connector testing
+4. Add fixture data for the schema to `examples/sample-outputs.md` to support stub connector testing
 
 ---
 
@@ -311,7 +310,7 @@ A live connector replaces the placeholder transport and authentication configura
 | Component | Technology |
 |---|---|
 | AI runtime | Claude Code (Anthropic) |
-| Plugin format | Claude Code plugin manifest (`plugin.json`) |
+| Claude Code integration | `.claude/` directory (commands, skills, agents, rules, hooks) |
 | Command templates | Markdown prompt files (`commands/*.md`) |
 | Reasoning modules (skills) | Markdown instruction files (`skills/*.md`) |
 | Lifecycle hooks | Python 3 scripts (`hooks/*.py`) |

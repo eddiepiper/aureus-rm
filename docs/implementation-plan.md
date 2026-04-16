@@ -8,7 +8,7 @@
 
 ### Deliverables
 
-- [ ] Plugin manifest (`plugin.json`) validated by Claude Code
+- [ ] `.claude/` structure validated (commands, skills, agents, rules, hooks all present)
 - [ ] `.mcp.json` with all placeholder servers declared
 - [ ] Mock MCP server implemented in Python for: `crm`, `portfolio`, `suitability`
 - [ ] Commands working with mock data: `/client-review`, `/stock-brief`, `/meeting-pack`
