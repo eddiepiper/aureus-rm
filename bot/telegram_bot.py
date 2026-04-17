@@ -10,6 +10,7 @@ Supported commands:
       /idea_generation  /morning_note  /portfolio_scenario
   V5.1: /relationship_status  /overdue_followups  /attention_list
         /morning_rm_brief  /log_response
+  V7: /ai_assessment
 """
 
 import logging
@@ -31,7 +32,7 @@ from services.sheets_service import SheetsService
 logger = logging.getLogger(__name__)
 
 HELP_TEXT = """
-*Aureus RM Copilot — V5.1*
+*Aureus RM Copilot — V7*
 
 *V2 — Client & Portfolio*
 /client\\_review [name] — Full client review
@@ -55,6 +56,9 @@ HELP_TEXT = """
 /attention\\_list — Ranked clients needing RM attention
 /morning\\_rm\\_brief — Daily RM working brief
 /log\\_response [name] [interested|neutral|declined] [ticker] — Log client response
+
+*V7 — AI Approval*
+/ai\\_assessment [name] — Accredited Investor eligibility assessment
 
 /help — show this message
 """
@@ -148,6 +152,12 @@ def build_application(
     app.add_handler(CommandHandler(
         "log_response",
         _make_command_handler("log-response", router, sheets_service, allow_empty_args=False),
+    ))
+
+    # --- V7 — AI Approval Agent ---
+    app.add_handler(CommandHandler(
+        "ai_assessment",
+        _make_command_handler("ai-assessment", router, sheets_service),
     ))
 
     # --- Natural-language messages ---

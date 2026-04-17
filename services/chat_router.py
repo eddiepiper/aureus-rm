@@ -101,6 +101,13 @@ INTENTS: dict[str, list[str]] = {
         "client declined", "client neutral", "mark as interested",
         "mark as declined", "record response", "log client",
     ],
+    # V7 — AI Approval
+    "ai_assessment": [
+        "ai assessment", "accredited investor", "assess client",
+        "client assessment", "ai eligibility", "check ai status",
+        "is accredited", "qualify as accredited", "ai approval",
+        "does qualify as", "qualifies as accredited",
+    ],
     # Help
     "help": [
         "help", "what can you do", "commands", "how do i",
@@ -128,6 +135,8 @@ HELP_TEXT = (
     "- *Attention List* — `who needs attention today`\n"
     "- *Morning RM Brief* — `what should I focus on today`\n"
     "- *Log Client Response* — `log response John Tan interested NVDA`\n\n"
+    "*V7 AI Approval:*\n"
+    "- *AI Assessment* — `accredited investor assessment for John Tan`\n\n"
     "Or use slash commands — type /help."
 )
 
@@ -171,6 +180,8 @@ _COMMAND_MAP: dict[str, str] = {
     "attention_list":      "attention-list",
     "morning_rm_brief":    "morning-rm-brief",
     "log_response":        "log-response",
+    # V7
+    "ai_assessment":       "ai-assessment",
 }
 
 _TICKER_COMMANDS = frozenset({
@@ -184,6 +195,7 @@ _CLIENT_COMMANDS_V3 = frozenset({
 _CLIENT_COMMANDS_V2 = frozenset({
     "client_review", "meeting_pack", "next_best_action",
     "relationship_status", "overdue_followups",
+    "ai_assessment",
 })
 
 # Commands that need neither a client nor a ticker
@@ -203,8 +215,9 @@ class ConversationState:
         self.intent: Optional[str] = None
         self.client_name: Optional[str] = None
         self.ticker: Optional[str] = None
-        self.waiting_for: Optional[str] = None  # "client_name" | "ticker"
+        self.waiting_for: Optional[str] = None  # "client_name" | "ticker" | "criteria"
         self.response_status: Optional[str] = None  # for log-response
+        self.criteria: Optional[str] = None  # for ai_assessment
 
     def reset(self):
         self.intent = None
@@ -212,6 +225,7 @@ class ConversationState:
         self.ticker = None
         self.waiting_for = None
         self.response_status = None
+        self.criteria = None
 
     def is_pending(self) -> bool:
         return self.intent is not None and self.waiting_for is not None
@@ -278,9 +292,37 @@ class ChatRouter:
                     return ChatResolution(
                         reply=f"Got it — *{state.client_name}*. Which ticker are you looking at?"
                     )
+                if state.intent == "ai_assessment":
+                    # After capturing client name, ask for criteria
+                    state.waiting_for = "criteria"
+                    return ChatResolution(
+                        reply=(
+                            f"Got it — *{state.client_name}*. "
+                            "Which eligibility basis should I assess?\n\n"
+                            "1️⃣  Income ≥ SGD 300,000\n"
+                            "2️⃣  Net Personal Assets > SGD 2,000,000\n"
+                            "3️⃣  Net Financial Assets > SGD 1,000,000\n\n"
+                            "Reply with `1`, `2`, or `3`"
+                        )
+                    )
             elif state.waiting_for == "ticker":
                 ticker = _extract_ticker(stripped.upper()) or stripped.upper().strip()
                 state.ticker = ticker
+                state.waiting_for = None
+            elif state.waiting_for == "criteria":
+                from services.ai_approval_agent import normalize_criteria
+                criteria = normalize_criteria(stripped.lower())
+                if criteria is None:
+                    # Unrecognised input — prompt again (option 4 removed)
+                    return ChatResolution(
+                        reply=(
+                            "Please reply with a number or the criterion name:\n\n"
+                            "1️⃣  Income\n"
+                            "2️⃣  Net Personal Assets\n"
+                            "3️⃣  Net Financial Assets"
+                        )
+                    )
+                state.criteria = criteria
                 state.waiting_for = None
 
             if not state.waiting_for:
@@ -381,6 +423,7 @@ class ChatRouter:
                     "portfolio_fit":      "Which client are you assessing?",
                     "relationship_status": "Which client's relationship status would you like?",
                     "overdue_followups":  "Which client should I check for overdue items?",
+                    "ai_assessment":      "Which client should I run the AI eligibility assessment for?",
                 }
                 return ChatResolution(reply=prompts.get(intent, "Which client?"))
             if intent == "portfolio_fit" and not state.ticker:
@@ -410,6 +453,11 @@ class ChatRouter:
                 args = args + [state.response_status]
             if state.ticker:
                 args = args + [state.ticker]
+        elif state.intent == "ai_assessment":
+            # Pass as: [client_words...] [optional_criteria]
+            args = state.client_name.split() if state.client_name else []
+            if state.criteria:
+                args = args + [state.criteria]
         else:
             args = state.client_name.split() if state.client_name else []
 

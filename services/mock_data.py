@@ -503,3 +503,108 @@ MOCK_STOCKS: dict[str, dict] = {
         ],
     },
 }
+
+# ---------------------------------------------------------------------------
+# V7 — AI Assessment mock data
+#
+# ---------------------------------------------------------------------------
+# MOCK_AI_ASSESSMENTS — V8 schema (deterministic 3-layer engine)
+#
+# CUST001 (John Tan) — bank-held data (source_is_internal = True).
+# All three criterion routes are populated for test coverage.
+# Financial assets is the primary test path (SGD 1.5M net after margin deduction).
+# Primary income period and NOA are both referenced.
+# Primary residence uses the new primary_residence_fmv field with cap applied.
+# ---------------------------------------------------------------------------
+
+MOCK_AI_ASSESSMENTS = [
+    {
+        # ---- Customer identifiers ----
+        "assessment_id":    "AI001",
+        "customer_id":      "CUST001",
+        "customer_name":    "John Tan",
+
+        # ---- Assessment metadata ----
+        "assessment_date":      "2026-04-17",
+        "selected_criterion":   "",              # set at runtime by RM
+        "data_source":          "bank_system",
+        "source_is_internal":   True,            # bank-held — explicitly set
+
+        # ---- Evidence ----
+        "evidence_type":    "income_statement",
+        "evidence_date":    "2026-03-01",        # within 60-day window as of 2026-04-17
+
+        # ---- Income fields ----
+        # Qualifies: 360,000 >= 300,000 threshold
+        "annual_income":         360_000,
+        "income_currency":       "SGD",
+        "income_period_start":   "2025-04-01",
+        "income_period_end":     "2026-03-31",   # ~365 days
+        "income_source":         "Employment",
+        "employer_name":         "ABC Capital Pte Ltd",
+        "job_title":             "Managing Director",
+        "salary_ytd":            270_000,
+        "bonus_ytd":              90_000,
+        "latest_noa_year":       "2025",
+        "latest_noa_amount":     350_000,
+
+        # ---- Net personal assets fields ----
+        # Primary residence: FMV 2.5M, loan 800k, 100% ownership
+        #   equity = (2,500,000 × 1.0) − (800,000 × 1.0) = 1,700,000
+        #   capped = min(1,700,000, 1,000,000) = 1,000,000
+        # Other assets + pr cap = exceeds 2,000,000
+        "primary_residence_fmv":            2_500_000,
+        "primary_residence_secured_loan":     800_000,
+        "ownership_share_pct":                    1.0,  # 100%
+        "property_valuation_date":          "2025-10-01",  # within 365-day window
+        "other_personal_assets_value":        200_000,
+        "other_real_estate_value":            900_000,
+        "other_real_estate_secured_loans":    300_000,
+        "financial_assets_for_npa_value":   1_200_000,
+        "insurance_surrender_value":          150_000,
+        "business_interest_value":                  0,
+        "other_personal_liabilities_value":   100_000,
+        "valuation_date":                   "2025-10-01",
+        "statement_date":                   "2026-03-01",
+
+        # ---- Financial assets fields (primary test path) ----
+        # Gross components: 300k + 1,100k + 100k (CPFIS) = 1,500k
+        # Margin loan deducted: 0 (no margin used here)
+        # recognised_nfa = 1,500,000 — qualifies > 1,000,000 threshold
+        "total_financial_assets":    1_500_000,
+        "cash_holdings":               300_000,
+        "investment_holdings":       1_100_000,
+        "cpf_investment_amount":       100_000,   # CPFIS only
+        "funds_under_management_value":      0,
+        "financial_assets_related_liabilities": 0,
+        "margin_loan_balance":               0,
+        "portfolio_credit_line_balance":     0,
+
+        # ---- FX ----
+        "fx_rate_used":  None,
+        "fx_rate_date":  None,
+
+        # ---- Joint account ----
+        "joint_account_flag":  False,
+        "joint_account_note":  "",
+
+        # ---- Decision output (blank at input time — filled post-assessment) ----
+        "recognised_amount_sgd":   None,
+        "threshold_sgd":           None,
+        "pass_result":             None,
+        "confidence_level":        None,
+        "assessment_status":       None,
+        "missing_fields":          None,
+        "inconsistency_flags":     None,
+        "manual_review_required":  None,
+        "manual_review_reasons":   None,
+
+        # ---- Checker workflow ----
+        "checker_status":  "pending_review",
+        "memo_text":       "",
+        "assessor_notes":  "",
+
+        # ---- Metadata ----
+        "last_updated":  "2026-04-17",
+    },
+]

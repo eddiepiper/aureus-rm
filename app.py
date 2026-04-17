@@ -8,7 +8,7 @@ Startup sequence:
   2. Connect to Google Sheets (or fall back to mock mode)
   3. Initialize Claude API service (optional — falls back to templates)
   4. Initialize V5.1 shared services (RelationshipMemoryService, WritebackService)
-  5. Initialize specialist agents (Portfolio Counsellor, Equity Analyst, NBA Agent)
+  5. Initialize specialist agents (Portfolio Counsellor, Equity Analyst, NBA Agent, AI Approval Agent)
   6. Wire AureusOrchestrator and CommandRouter
   7. Start the Telegram bot
 """
@@ -30,6 +30,8 @@ from services.relationship_memory_service import RelationshipMemoryService
 from services.writeback_service import WritebackService
 from services.nba_agent import NBAAgent
 from services.chat_router import ChatRouter
+# V7
+from services.ai_approval_agent import AIApprovalAgent
 from bot.telegram_bot import build_application
 
 
@@ -111,16 +113,24 @@ def main() -> None:
             claude_service=claude_service,
             relationship_memory=relationship_memory,
         )
+        ai_approval_agent = AIApprovalAgent(
+            claude_service=claude_service,
+            sheets_service=sheets,
+        )
         generation_backend = AureusOrchestrator(
             portfolio_counsellor=portfolio_counsellor,
             equity_analyst=equity_analyst,
             financial_analysis=financial_analysis,
             claude_service=claude_service,
             nba_agent=nba_agent,
+            ai_approval_agent=ai_approval_agent,
         )
-        logger.info("Aureus V5.1 architecture enabled | two-agent + NBA Agent")
+        logger.info("Aureus V7 architecture enabled | two-agent + NBA Agent + AI Approval Agent")
 
-    # 6. Command router
+    # 6. Chat router (initialised before CommandRouter so it can be passed in)
+    chat_router = ChatRouter(relationship_memory=relationship_memory)
+
+    # 6b. Command router
     router = CommandRouter(
         client_service=client_service,
         claude_service=generation_backend,
@@ -130,10 +140,9 @@ def main() -> None:
         relationship_memory=relationship_memory,
         writeback_service=writeback_service,
         nba_agent=nba_agent if claude_service else None,
+        ai_approval_agent=ai_approval_agent if claude_service else None,
+        chat_router=chat_router,
     )
-
-    # 6b. Chat router (with session continuity via RelationshipMemoryService)
-    chat_router = ChatRouter(relationship_memory=relationship_memory)
 
     # 7. Telegram bot
     logger.info("Starting Telegram bot...")

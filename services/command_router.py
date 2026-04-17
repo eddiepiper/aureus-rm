@@ -35,6 +35,8 @@ class CommandRouter:
         relationship_memory=None,
         writeback_service=None,
         nba_agent=None,
+        ai_approval_agent=None,
+        chat_router=None,
     ):
         self.client = client_service
         self.claude = claude_service
@@ -44,6 +46,9 @@ class CommandRouter:
         self.relationship_memory = relationship_memory
         self.writeback = writeback_service
         self.nba_agent = nba_agent
+        self.ai_approval_agent = ai_approval_agent
+        self.chat_router = chat_router
+        self._current_chat_id: str = ""
 
         if self.claude:
             logger.info("CommandRouter: Claude API enabled")
@@ -59,12 +64,15 @@ class CommandRouter:
             logger.info("CommandRouter: WritebackService attached")
         if self.nba_agent:
             logger.info("CommandRouter: NBAAgent attached")
+        if self.ai_approval_agent:
+            logger.info("CommandRouter: AIApprovalAgent attached")
 
     # ------------------------------------------------------------------
     # Main router
     # ------------------------------------------------------------------
 
     async def route(self, command: str, args: list, chat_id: str = "") -> str:
+        self._current_chat_id = chat_id  # made available to handlers via self
         handlers = {
             # V2 — Client & Portfolio
             "client-review":    self._client_review,
@@ -85,6 +93,8 @@ class CommandRouter:
             "attention-list":      self._attention_list,
             "morning-rm-brief":    self._morning_rm_brief,
             "log-response":        self._log_response,
+            # V7 — AI Approval Agent
+            "ai-assessment":       self._ai_assessment,
         }
         handler = handlers.get(command)
         if handler is None:
@@ -95,7 +105,8 @@ class CommandRouter:
                 "/idea\\_generation · /morning\\_note\n"
                 "V3 Wealth: /portfolio\\_scenario\n"
                 "V5.1: /relationship\\_status · /overdue\\_followups · "
-                "/attention\\_list · /morning\\_rm\\_brief · /log\\_response"
+                "/attention\\_list · /morning\\_rm\\_brief · /log\\_response\n"
+                "V7: /ai\\_assessment"
             )
         try:
             response = await handler(args)
@@ -118,6 +129,7 @@ class CommandRouter:
             "client-review", "meeting-pack", "next-best-action",
             "portfolio-fit", "portfolio-scenario", "idea-generation",
             "relationship-status", "overdue-followups", "log-response",
+            "ai-assessment",
         }
         if command in client_commands and args:
             # For portfolio-fit: last arg is ticker, rest is name
@@ -726,3 +738,154 @@ class CommandRouter:
         if compressed.get("liquidity"):
             ctx["liquidity"] = compressed["liquidity"]
         return await self._generate("portfolio-scenario", ctx)
+
+    # ------------------------------------------------------------------
+    # V7 — AI Approval Agent handler
+    # ------------------------------------------------------------------
+
+    async def _ai_assessment(self, args: list) -> str:
+        """
+        Run an Accredited Investor eligibility assessment for a client.
+
+        Usage: /ai_assessment [client name] [optional: 1/2/3/income/net assets/financial assets]
+
+        If no criteria is provided, Aureus asks the RM to specify one.
+        The RM can reply with a number (1/2/3/4) or text (income / net assets / financial assets).
+        """
+        from services.ai_approval_agent import normalize_criteria
+
+        chat_id = self._current_chat_id
+
+        # ------------------------------------------------------------------
+        # Parse args: [name words...] [optional criteria]
+        # Try last arg, then last two args, for a criteria match.
+        # ------------------------------------------------------------------
+        criteria = None
+        name_args = list(args)
+
+        if name_args:
+            normalized = normalize_criteria(name_args[-1].lower())
+            if normalized:
+                criteria = normalized
+                name_args = name_args[:-1]
+
+        if criteria is None and len(name_args) >= 2:
+            two_word = " ".join(name_args[-2:]).lower()
+            normalized = normalize_criteria(two_word)
+            if normalized:
+                criteria = normalized
+                name_args = name_args[:-2]
+
+        name = " ".join(name_args).strip()
+        if not name:
+            return (
+                "Usage: `/ai_assessment [client name]`\n"
+                "Example: `/ai_assessment John Tan`\n"
+                "Or with criteria: `/ai_assessment John Tan 1`"
+            )
+
+        # ------------------------------------------------------------------
+        # No criteria — ask the RM and set pending state in ChatRouter
+        # so the next free-text reply is captured automatically.
+        # ------------------------------------------------------------------
+        if criteria is None:
+            question = (
+                f"Which eligibility basis should I assess for *{name.title()}*?\n\n"
+                "1️⃣  Income ≥ SGD 300,000\n"
+                "2️⃣  Net Personal Assets > SGD 2,000,000\n"
+                "3️⃣  Net Financial Assets > SGD 1,000,000\n\n"
+                "Reply with `1`, `2`, or `3`"
+            )
+            if self.chat_router and chat_id:
+                state = self.chat_router._get_state(chat_id)
+                state.intent = "ai_assessment"
+                state.client_name = name.title()
+                state.waiting_for = "criteria"
+            return question
+
+        # ------------------------------------------------------------------
+        # Resolve client
+        # ------------------------------------------------------------------
+        ctx = self.client.build_client_review_context(name)
+        customer = ctx.get("customer", {})
+        cid = customer.get("customer_id", "")
+        is_mock = ctx.get("is_mock", False)
+
+        # ------------------------------------------------------------------
+        # Load AI assessment data (Sheets → mock fallback)
+        # ------------------------------------------------------------------
+        ai_data = self._get_ai_assessment_data(cid, is_mock=is_mock)
+        ctx["ai_assessment_data"] = ai_data
+        ctx["criteria"] = criteria
+        ctx["customer_name"] = (
+            customer.get("preferred_name") or customer.get("full_name") or name.title()
+        )
+
+        # ------------------------------------------------------------------
+        # Run deterministic assess() now so we have the result for writeback decisions.
+        # generate() will call assess() again internally — that's intentional:
+        # the deterministic layer is fast and the result drives memo generation.
+        # ------------------------------------------------------------------
+        has_missing = False
+        has_issues = False
+        if ai_data and self.ai_approval_agent and hasattr(self.ai_approval_agent, "assess"):
+            prelim = self.ai_approval_agent.assess(
+                ai_data,
+                criterion=criteria,
+                customer_name=ctx["customer_name"],
+                customer_id=cid,
+            )
+            has_missing = bool(prelim.missing_fields)
+            has_issues  = bool(prelim.inconsistency_flags) or prelim.manual_review_required
+
+        response = await self._generate("ai-assessment", ctx)
+
+        # ------------------------------------------------------------------
+        # Writeback: always log the assessment as an interaction.
+        # Create a follow-up task only if missing data exists.
+        # ------------------------------------------------------------------
+        if not is_mock and self.writeback and cid:
+            self.writeback.schedule_interaction_log(
+                customer_id=cid,
+                command="ai-assessment",
+                summary=f"AI assessment run | criterion={criteria} | missing_data={has_missing} | flags={has_issues}",
+                response_text=response[:500],
+            )
+            if has_missing or has_issues:
+                self.writeback.schedule_task_creation(
+                    customer_id=cid,
+                    task_category="ai_assessment",
+                    action_title=f"Complete AI assessment data — {ctx['customer_name']}",
+                    action_detail=(
+                        "AI assessment flagged missing or inconsistent data. "
+                        "RM to update AI_Assessment sheet before re-running."
+                    ),
+                    urgency="Medium",
+                    source="AIApprovalAgent",
+                )
+
+        return response
+
+    def _get_ai_assessment_data(self, customer_id: str, is_mock: bool = False) -> dict:
+        """
+        Load the most recent AI assessment record for a customer.
+        Uses live Sheets if available, falls back to mock data.
+        """
+        if not is_mock and self.sheets and customer_id:
+            try:
+                rows = self.sheets.list_customer_ai_assessments(customer_id)
+                if rows:
+                    return sorted(
+                        rows,
+                        key=lambda r: str(r.get("last_updated", "")),
+                        reverse=True,
+                    )[0]
+            except Exception as exc:
+                logger.warning("Failed to load AI assessment from Sheets: %s", exc)
+
+        # Mock fallback
+        from services import mock_data
+        for row in getattr(mock_data, "MOCK_AI_ASSESSMENTS", []):
+            if str(row.get("customer_id", "")) == customer_id:
+                return row
+        return {}

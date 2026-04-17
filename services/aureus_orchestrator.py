@@ -61,6 +61,11 @@ _NBA_ENHANCED_COMMANDS = frozenset({
     "next-best-action",
 })
 
+# V7 — Commands routed to the AI Approval Agent
+_AI_APPROVAL_COMMANDS = frozenset({
+    "ai-assessment",
+})
+
 # ---------------------------------------------------------------------------
 # Synthesis prompts — per collaboration command
 # ---------------------------------------------------------------------------
@@ -141,20 +146,23 @@ class AureusOrchestrator:
         financial_analysis,
         claude_service,
         nba_agent=None,
+        ai_approval_agent=None,
     ):
         self.portfolio_counsellor = portfolio_counsellor
         self.equity_analyst = equity_analyst
         self.fa = financial_analysis
         self.claude = claude_service
         self.nba_agent = nba_agent
+        self.ai_approval_agent = ai_approval_agent
         logger.info(
             "AureusOrchestrator: ready | solo_portfolio=%d solo_equity=%d "
-            "collaboration=%d nba=%d nba_enhanced=%d",
+            "collaboration=%d nba=%d nba_enhanced=%d ai_approval=%d",
             len(_PORTFOLIO_COMMANDS),
             len(_EQUITY_COMMANDS),
             len(_COLLABORATION_COMMANDS),
             len(_NBA_COMMANDS),
             len(_NBA_ENHANCED_COMMANDS),
+            len(_AI_APPROVAL_COMMANDS),
         )
 
     async def generate(self, command: str, ctx: dict) -> str:
@@ -188,6 +196,15 @@ class AureusOrchestrator:
             # Graceful fallback: Portfolio Counsellor solo
             logger.warning("Orchestrator: NBA-enhanced command %s but no NBAAgent", command)
             return await self.portfolio_counsellor.generate(command, ctx)
+
+        if command in _AI_APPROVAL_COMMANDS:
+            if self.ai_approval_agent:
+                logger.info("Orchestrator → AIApprovalAgent | command=%s", command)
+                return await self.ai_approval_agent.generate(command, ctx)
+            logger.warning(
+                "Orchestrator: AI approval command %s but no AIApprovalAgent — fallback", command
+            )
+            return await self.claude.generate(command, ctx)
 
         # Unknown command — fall through to Claude with default Aureus persona
         logger.warning("Orchestrator: unknown command %s — using default generate", command)

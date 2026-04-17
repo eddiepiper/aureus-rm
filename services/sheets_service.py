@@ -3,12 +3,13 @@ services/sheets_service.py
 
 Google Sheets data access layer for Aureus RM.
 
-Assumes a workbook with 5 tabs:
+Assumes a workbook with these tabs:
   - Customers
   - Holdings
   - Interactions
   - Watchlist
   - Tasks_NBA
+  - AI_Assessment  (V7 — created by bootstrap_v7_ai_fields.py)
 
 The first row of each tab is a header row.
 customer_id is the join key across all tabs.
@@ -36,6 +37,7 @@ TAB_HOLDINGS = "Holdings"
 TAB_INTERACTIONS = "Interactions"
 TAB_WATCHLIST = "Watchlist"
 TAB_TASKS = "Tasks_NBA"
+TAB_AI_ASSESSMENT = "AI_Assessment"
 
 
 class SheetsUnavailableError(Exception):
@@ -248,4 +250,74 @@ class SheetsService:
             logger.info("Appended task for customer: %s", row.get("customer_id"))
         except Exception as e:
             logger.error("Failed to append task: %s", e)
+            raise
+
+    # ------------------------------------------------------------------
+    # V7 — AI Assessment
+    # ------------------------------------------------------------------
+
+    # Column order must match bootstrap_v7_ai_fields.py AI_ASSESSMENT_HEADERS exactly.
+    # Fields marked [DEPRECATED] are kept for backward-read compatibility but
+    # are not written by the new engine. Remove them in a future schema migration.
+    AI_ASSESSMENT_COLS = [
+        # Customer identifiers
+        "assessment_id", "customer_id", "customer_name",
+        # Assessment metadata
+        "assessment_date", "selected_criterion", "data_source", "source_is_internal",
+        # Evidence
+        "evidence_type", "evidence_date",
+        # Income fields
+        "annual_income", "income_currency", "income_period_start", "income_period_end",
+        "income_source", "employer_name", "job_title",
+        "salary_ytd", "bonus_ytd", "latest_noa_year", "latest_noa_amount",
+        # DEPRECATED income field kept for backward read
+        "income_year",                          # [DEPRECATED] replaced by income_period_start/end
+        # Net personal assets fields
+        "primary_residence_fmv", "primary_residence_secured_loan", "ownership_share_pct",
+        "property_valuation_date",
+        "other_personal_assets_value", "other_real_estate_value", "other_real_estate_secured_loans",
+        "financial_assets_for_npa_value", "insurance_surrender_value",
+        "business_interest_value", "other_personal_liabilities_value",
+        "valuation_date", "statement_date",
+        # DEPRECATED net assets fields kept for backward read
+        "total_assets", "total_liabilities", "net_assets",   # [DEPRECATED] use explicit NPA fields
+        "property_value",                                      # [DEPRECATED] use primary_residence_fmv
+        "mortgage_liability",                                  # [DEPRECATED] use primary_residence_secured_loan
+        "financial_assets_networth",                           # [DEPRECATED] use financial_assets_for_npa_value
+        # Financial assets fields
+        "total_financial_assets", "cash_holdings", "investment_holdings",
+        "cpf_investment_amount", "funds_under_management_value",
+        "financial_assets_related_liabilities",
+        "margin_loan_balance", "portfolio_credit_line_balance",
+        # FX
+        "fx_rate_used", "fx_rate_date",
+        # Joint account
+        "joint_account_flag", "joint_account_note",
+        # Decision output (written after assessment runs)
+        "recognised_amount_sgd", "threshold_sgd", "pass_result",
+        "confidence_level", "assessment_status",
+        "missing_fields", "inconsistency_flags",
+        "manual_review_required", "manual_review_reasons",
+        # Checker workflow
+        "checker_status", "memo_text", "assessor_notes",
+        # DEPRECATED metadata field
+        "ai_selected_criteria",                 # [DEPRECATED] use selected_criterion
+        "last_updated",
+    ]
+
+    def list_customer_ai_assessments(self, customer_id: str) -> list[dict]:
+        """Return all AI assessment rows for a customer_id."""
+        rows = self._get_tab(TAB_AI_ASSESSMENT)
+        return [r for r in rows if str(r.get("customer_id", "")) == customer_id]
+
+    def append_ai_assessment(self, row: dict) -> None:
+        """Append a new AI assessment row to the AI_Assessment tab (column-ordered)."""
+        try:
+            ws = self._spreadsheet.worksheet(TAB_AI_ASSESSMENT)
+            ordered = [row.get(col, "") for col in self.AI_ASSESSMENT_COLS]
+            ws.append_row(ordered)
+            self.invalidate_cache()
+            logger.info("Appended AI assessment for customer: %s", row.get("customer_id"))
+        except Exception as e:
+            logger.error("Failed to append AI assessment: %s", e)
             raise
