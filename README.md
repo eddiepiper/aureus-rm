@@ -103,7 +103,7 @@ See [docs/architecture.md](docs/architecture.md) for the full service map and da
 |---------|-------|---------|
 | `/ai_assessment` | `/ai_assessment John Tan` | Generate a structured Accredited Investor eligibility assessment memo |
 
-Supports criteria selection by number (`1`/`2`/`3`/`4`) or text (`income` / `net assets` / `financial assets`). If no criteria is provided, Aureus asks. See [docs/v7_ai_approval.md](docs/v7_ai_approval.md).
+Supports criteria selection by number (`1`/`2`/`3`) or text (`income` / `net assets` / `financial assets`). If no criterion is provided, Aureus asks. See [docs/ai_assessment_rules.md](docs/ai_assessment_rules.md).
 
 ---
 
@@ -118,8 +118,9 @@ The bot reads from and writes to a Google Spreadsheet with these tabs:
 | `Interactions` | `customer_id`, `interaction_date`, `channel`, `summary`, `follow_up_required` |
 | `Watchlist` | `customer_id`, `ticker`, `security_name`, `reason_for_interest` |
 | `Tasks_NBA` | `customer_id`, `action_title`, `urgency`, `status`, `due_date`, `nba_score` |
+| `AI_Assessment` | `customer_id`, `selected_criterion`, `recognised_amount_sgd`, `assessment_status`, `confidence_level`, `memo_text` |
 
-`customer_id` is the join key across all tabs. V5.1 adds relationship memory columns to `Customers` and `Tasks_NBA` — run `python scripts/bootstrap_v51_schema.py` to migrate a live sheet.
+`customer_id` is the join key across all tabs. V5.1 adds relationship memory columns to `Customers` and `Tasks_NBA`; V7 adds the `AI_Assessment` tab. See the Schema Migration section below.
 
 ---
 
@@ -188,9 +189,9 @@ Tests cover: AIApprovalAgent eligibility engine (67), NBAAgent scoring, Writebac
 
 ---
 
-## V5.1 Schema Migration
+## Schema Migration
 
-If upgrading a live Google Sheet from V4/V5:
+If upgrading a live Google Sheet from an earlier version:
 
 ```bash
 # V5.1 — relationship memory columns
