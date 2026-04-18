@@ -2,6 +2,8 @@
 
 A Telegram-based copilot for relationship managers in private banking. Single orchestrated assistant — one consistent interface backed by specialized internal modules for client intelligence, equity research, portfolio suitability, and relationship memory.
 
+**Current version:** V7 (production) | **175 tests passing**
+
 ![Aureus Architecture](./Aureus_Architecture.png)
 
 ---
@@ -175,14 +177,14 @@ Leave `GOOGLE_SHEETS_SPREADSHEET_ID` empty or omit `service-account.json`. The b
 ## Testing
 
 ```bash
-# Full suite (108 tests)
+# Full suite (175 tests)
 venv/bin/python -m pytest tests/ -q
 
 # Single file
-venv/bin/python -m pytest tests/test_nba_agent.py -v
+venv/bin/python -m pytest tests/test_ai_approval_agent.py -v
 ```
 
-Tests cover: NBAAgent scoring, WritebackService deduplication, ChatRouter NL resolution, FinancialAnalysisService, guardrail rules, mock data fixtures.
+Tests cover: AIApprovalAgent eligibility engine (67), NBAAgent scoring, WritebackService deduplication, ChatRouter NL resolution, FinancialAnalysisService, guardrail rules, mock data fixtures.
 
 ---
 
@@ -191,10 +193,14 @@ Tests cover: NBAAgent scoring, WritebackService deduplication, ChatRouter NL res
 If upgrading a live Google Sheet from V4/V5:
 
 ```bash
+# V5.1 — relationship memory columns
 venv/bin/python scripts/bootstrap_v51_schema.py
+
+# V7 — AI_Assessment tab (create or add missing columns)
+venv/bin/python scripts/bootstrap_v7_ai_fields.py
 ```
 
-This adds V5.1 relationship memory columns non-destructively. Existing data is preserved.
+Both scripts are idempotent — safe to run on existing sheets. Existing data is never modified.
 
 ---
 
@@ -210,6 +216,7 @@ aureus-rm/
 │   ├── portfolio_counsellor_agent.py
 │   ├── equity_analyst_agent.py
 │   ├── nba_agent.py                # Hybrid rule-based scoring + Claude narrative
+│   ├── ai_approval_agent.py        # Deterministic AI eligibility engine + memo rendering
 │   ├── relationship_memory_service.py  # Session continuity per client
 │   ├── writeback_service.py        # Async Sheets write-back with dedup
 │   ├── chat_router.py              # NL resolution + session continuity
@@ -225,8 +232,9 @@ aureus-rm/
 │   └── crm_logger.py               # Logs completed interactions
 ├── scripts/
 │   ├── bootstrap_google_sheet.py   # Initial Sheets setup
-│   └── bootstrap_v51_schema.py     # V5.1 column migration
-├── tests/                          # 108 tests — mirrors services/ structure
+│   ├── bootstrap_v51_schema.py     # V5.1 column migration
+│   └── bootstrap_v7_ai_fields.py   # V7 AI_Assessment tab creation
+├── tests/                          # 175 tests — mirrors services/ structure
 ├── schemas/                        # JSON Schema for output validation
 ├── docs/                           # Architecture, agents, version history, guardrails
 ├── .claude/                        # Claude Code integration (commands, skills, rules)

@@ -816,7 +816,7 @@ class CommandRouter:
         # ------------------------------------------------------------------
         ai_data = self._get_ai_assessment_data(cid, is_mock=is_mock)
         ctx["ai_assessment_data"] = ai_data
-        ctx["criteria"] = criteria
+        ctx["criterion"] = criteria
         ctx["customer_name"] = (
             customer.get("preferred_name") or customer.get("full_name") or name.title()
         )
@@ -826,6 +826,7 @@ class CommandRouter:
         # generate() will call assess() again internally — that's intentional:
         # the deterministic layer is fast and the result drives memo generation.
         # ------------------------------------------------------------------
+        prelim = None
         has_missing = False
         has_issues = False
         if ai_data and self.ai_approval_agent and hasattr(self.ai_approval_agent, "assess"):
@@ -841,28 +842,42 @@ class CommandRouter:
         response = await self._generate("ai-assessment", ctx)
 
         # ------------------------------------------------------------------
-        # Writeback: always log the assessment as an interaction.
-        # Create a follow-up task only if missing data exists.
+        # Writeback (live mode only — three operations):
+        # 1. Write structured decision output back to the AI_Assessment tab.
+        # 2. Log as an interaction in the Interactions tab.
+        # 3. Create a follow-up task if data is missing or flags exist.
         # ------------------------------------------------------------------
-        if not is_mock and self.writeback and cid:
-            self.writeback.schedule_interaction_log(
-                customer_id=cid,
-                command="ai-assessment",
-                summary=f"AI assessment run | criterion={criteria} | missing_data={has_missing} | flags={has_issues}",
-                response_text=response[:500],
-            )
-            if has_missing or has_issues:
-                self.writeback.schedule_task_creation(
+        if not is_mock and cid:
+            if prelim is not None and self.sheets:
+                self.sheets.write_ai_assessment_result(
                     customer_id=cid,
-                    task_category="ai_assessment",
-                    action_title=f"Complete AI assessment data — {ctx['customer_name']}",
-                    action_detail=(
-                        "AI assessment flagged missing or inconsistent data. "
-                        "RM to update AI_Assessment sheet before re-running."
-                    ),
-                    urgency="Medium",
-                    source="AIApprovalAgent",
+                    result=prelim,
+                    memo_text=response,
                 )
+
+            if self.writeback:
+                self.writeback.schedule_interaction_log(
+                    customer_id=cid,
+                    command="ai-assessment",
+                    summary=(
+                        f"AI assessment | criterion={criteria} | "
+                        f"status={prelim.assessment_status if prelim else 'n/a'} | "
+                        f"missing={has_missing} | flags={has_issues}"
+                    ),
+                    response_text=response[:500],
+                )
+                if has_missing or has_issues:
+                    self.writeback.schedule_task_creation(
+                        customer_id=cid,
+                        task_category="ai_assessment",
+                        action_title=f"Complete AI assessment data — {ctx['customer_name']}",
+                        action_detail=(
+                            "AI assessment flagged missing or inconsistent data. "
+                            "RM to update the AI_Assessment sheet before re-running."
+                        ),
+                        urgency="Medium",
+                        source="AIApprovalAgent",
+                    )
 
         return response
 

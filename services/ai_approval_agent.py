@@ -1187,7 +1187,7 @@ class AIApprovalAgent:
             or "Unknown Client"
         )
         customer_id = customer.get("customer_id", "")
-        criterion   = ctx.get("criteria")   # pre-normalised by CommandRouter
+        criterion   = ctx.get("criterion")  # pre-normalised by CommandRouter
         is_mock     = ctx.get("is_mock", False)
 
         if not ai_data:

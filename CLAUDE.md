@@ -9,7 +9,7 @@ Compliance-aware AI copilot for relationship managers and wealth advisors. Decis
 | Path | Purpose |
 |------|---------|
 | `app.py` | Entry point — boots services and starts the Telegram bot |
-| `.claude/commands/` | Slash command prompt templates (8 commands) |
+| `.claude/commands/` | Slash command prompt templates (9 commands) |
 | `.claude/skills/` | Reusable reasoning modules loaded per command |
 | `hooks/` | Python lifecycle hooks (guardrail, source validation, CRM logger) |
 | `services/` | Service layer — orchestration, agents, financial analysis, CRM |
@@ -33,6 +33,9 @@ Compliance-aware AI copilot for relationship managers and wealth advisors. Decis
 | `/next-best-action` | `.claude/commands/next-best-action.md` | Next-best-action suggestions for RM |
 | `/risk-check` | `.claude/commands/risk-check.md` | Risk considerations before discussing a stock |
 | `/earnings-update` | `.claude/commands/earnings-update.md` | Earnings summary for banker use |
+| `/ai_assessment` | `.claude/commands/ai-assessment.md` | Accredited Investor eligibility assessment |
+
+**AI Assessment rules:** Read `.claude/rules/compliance.md` and `.claude/commands/ai-assessment.md` before generating any AI assessment output. The assessment is criterion-specific; never auto-switch to another criterion.
 
 ---
 

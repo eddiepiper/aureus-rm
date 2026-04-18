@@ -310,8 +310,97 @@ class SheetsService:
         rows = self._get_tab(TAB_AI_ASSESSMENT)
         return [r for r in rows if str(r.get("customer_id", "")) == customer_id]
 
+    def write_ai_assessment_result(
+        self,
+        customer_id: str,
+        result,
+        memo_text: str = "",
+    ) -> bool:
+        """
+        Write assessment decision output fields back to the most recent AI_Assessment row
+        for the given customer_id.
+
+        Writes: selected_criterion, recognised_amount_sgd, threshold_sgd, pass_result,
+        confidence_level, assessment_status, missing_fields, inconsistency_flags,
+        manual_review_required, manual_review_reasons, joint_account_flag,
+        joint_account_note, checker_status, memo_text, last_updated.
+
+        Does NOT overwrite input data (income, assets, evidence fields).
+        Returns True if a row was found and updated, False otherwise.
+        Logs errors but does not raise — writeback failure is non-fatal.
+        """
+        try:
+            ws = self._spreadsheet.worksheet(TAB_AI_ASSESSMENT)
+            all_values = ws.get_all_values()
+            if not all_values:
+                return False
+
+            header = [h.lower().strip() for h in all_values[0]]
+
+            # Find the most recent row for this customer (last match wins)
+            target_row_idx = None
+            for i, row in enumerate(all_values[1:], start=2):  # gspread 1-indexed; row 1 is header
+                row_dict = dict(zip(header, row))
+                if str(row_dict.get("customer_id", "")).strip() == customer_id:
+                    target_row_idx = i  # keep iterating to find the most recent
+
+            if target_row_idx is None:
+                logger.warning(
+                    "write_ai_assessment_result: no AI_Assessment row for customer %s",
+                    customer_id,
+                )
+                return False
+
+            today = datetime.date.today().isoformat()
+            output_fields = {
+                "selected_criterion":   result.selected_criterion or "",
+                "recognised_amount_sgd": (
+                    f"{result.recognised_amount_sgd:.2f}"
+                    if result.recognised_amount_sgd is not None
+                    else ""
+                ),
+                "threshold_sgd":        f"{result.threshold_sgd:.0f}" if result.threshold_sgd else "",
+                "pass_result":          str(result.pass_result),
+                "confidence_level":     result.confidence_level or "",
+                "assessment_status":    result.assessment_status or "",
+                "missing_fields":       " | ".join(result.missing_fields) if result.missing_fields else "",
+                "inconsistency_flags":  " | ".join(result.inconsistency_flags) if result.inconsistency_flags else "",
+                "manual_review_required": str(result.manual_review_required),
+                "manual_review_reasons": " | ".join(result.manual_review_reasons) if result.manual_review_reasons else "",
+                "joint_account_flag":   str(result.joint_account_flag),
+                "joint_account_note":   result.joint_account_note or "",
+                "checker_status":       result.checker_status or "pending_review",
+                "memo_text":            memo_text[:2000] if memo_text else "",
+                "last_updated":         today,
+            }
+
+            cells = []
+            for field_name, value in output_fields.items():
+                if field_name in header:
+                    col_idx = header.index(field_name) + 1  # gspread columns are 1-indexed
+                    cells.append(gspread.Cell(target_row_idx, col_idx, value))
+
+            if cells:
+                ws.update_cells(cells)
+                self.invalidate_cache()
+                logger.info(
+                    "Wrote AI assessment result for customer=%s status=%s confidence=%s",
+                    customer_id,
+                    result.assessment_status,
+                    result.confidence_level,
+                )
+            return True
+
+        except Exception as e:
+            logger.error("Failed to write AI assessment result for %s: %s", customer_id, e)
+            return False
+
     def append_ai_assessment(self, row: dict) -> None:
-        """Append a new AI assessment row to the AI_Assessment tab (column-ordered)."""
+        """
+        Append a new AI assessment input row to the AI_Assessment tab (column-ordered).
+        Used when creating a fresh assessment record before the engine runs.
+        To write decision output fields to an existing row, use write_ai_assessment_result().
+        """
         try:
             ws = self._spreadsheet.worksheet(TAB_AI_ASSESSMENT)
             ordered = [row.get(col, "") for col in self.AI_ASSESSMENT_COLS]
